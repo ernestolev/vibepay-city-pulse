@@ -1,6 +1,7 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import { VibeProvider } from "@/lib/vibe-context";
 
 function NotFoundComponent() {
   return (
@@ -29,19 +30,23 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "VibePay — Banking that gets you" },
+      { name: "description", content: "VibePay by Santander — context-aware offers that adapt to your city, weather and time." },
+      { name: "author", content: "Santander" },
+      { name: "theme-color", content: "#EC0000" },
+      { property: "og:title", content: "VibePay — Banking that gets you" },
+      { property: "og:description", content: "Context-aware offers that adapt to your city, weather and time." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: appCss,
+        href: "https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700;800&display=swap",
       },
     ],
   }),
@@ -65,5 +70,9 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
-  return <Outlet />;
+  return (
+    <VibeProvider>
+      <Outlet />
+    </VibeProvider>
+  );
 }
