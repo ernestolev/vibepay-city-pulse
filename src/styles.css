@@ -4,28 +4,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Design system definition.
- *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
- *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
- *
- * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
- * 2. Register it in @theme inline as --color-<name>: var(--<name>)
- */
-
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+  --radius-xl: calc(var(--radius) + 8px);
+  --radius-2xl: calc(var(--radius) + 16px);
+  --radius-3xl: calc(var(--radius) + 24px);
+  --radius-4xl: calc(var(--radius) + 32px);
+
+  --font-sans: "Open Sans", "Inter", system-ui, -apple-system, sans-serif;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -46,6 +35,18 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-ring-offset-background: var(--background);
+
+  --color-santander: var(--santander);
+  --color-santander-deep: var(--santander-deep);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+
+  --color-vibe-bg-from: var(--vibe-bg-from);
+  --color-vibe-bg-to: var(--vibe-bg-to);
+  --color-vibe-accent: var(--vibe-accent);
+  --color-vibe-text: var(--vibe-text);
+  --color-vibe-muted: var(--vibe-muted);
+
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -62,74 +63,87 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  --radius: 1.25rem; /* 20px+ rounded for premium fintech feel */
+
+  /* Santander palette */
+  --santander: oklch(0.582 0.25 27.5);       /* #EC0000 primary red */
+  --santander-deep: oklch(0.48 0.22 27.5);   /* deeper red for hover/gradient */
+
+  --background: oklch(0.985 0.002 0);        /* off-white */
+  --foreground: oklch(0.18 0.01 270);
+  --surface: oklch(0.97 0.003 0);            /* light gray surface */
+  --surface-elevated: oklch(1 0 0);
+
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
+  --card-foreground: oklch(0.18 0.01 270);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.18 0.01 270);
+
+  --primary: var(--santander);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.96 0.004 270);
+  --secondary-foreground: oklch(0.22 0.01 270);
+  --muted: oklch(0.955 0.004 270);
+  --muted-foreground: oklch(0.5 0.015 270);
+  --accent: oklch(0.95 0.01 27.5);
+  --accent-foreground: var(--santander);
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
-  --chart-1: oklch(0.646 0.222 41.116);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.92 0.005 270);
+  --input: oklch(0.92 0.005 270);
+  --ring: var(--santander);
+
+  /* Default Vibe (sunny) tokens — overridden via data-vibe on root */
+  --vibe-bg-from: oklch(0.78 0.16 75);
+  --vibe-bg-to: oklch(0.65 0.2 40);
+  --vibe-accent: oklch(0.98 0.05 85);
+  --vibe-text: oklch(0.99 0 0);
+  --vibe-muted: oklch(0.95 0.04 80 / 0.8);
+
+  --chart-1: oklch(0.582 0.25 27.5);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+
+  --sidebar: oklch(0.985 0.002 0);
+  --sidebar-foreground: oklch(0.18 0.01 270);
+  --sidebar-primary: var(--santander);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.95 0.01 27.5);
+  --sidebar-accent-foreground: var(--santander);
+  --sidebar-border: oklch(0.92 0.005 270);
+  --sidebar-ring: var(--santander);
 }
 
-.dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+/* Vibe themes — applied to <html data-vibe="..."> */
+[data-vibe="sunny"] {
+  --vibe-bg-from: oklch(0.82 0.14 80);
+  --vibe-bg-to: oklch(0.62 0.21 35);
+  --vibe-accent: oklch(0.98 0.06 90);
+  --vibe-text: oklch(0.99 0 0);
+  --vibe-muted: oklch(0.96 0.04 80 / 0.85);
+}
+[data-vibe="rainy"] {
+  --vibe-bg-from: oklch(0.55 0.1 240);
+  --vibe-bg-to: oklch(0.32 0.08 250);
+  --vibe-accent: oklch(0.85 0.09 230);
+  --vibe-text: oklch(0.99 0 0);
+  --vibe-muted: oklch(0.9 0.04 230 / 0.75);
+}
+[data-vibe="nighttime"] {
+  --vibe-bg-from: oklch(0.28 0.07 285);
+  --vibe-bg-to: oklch(0.16 0.05 270);
+  --vibe-accent: oklch(0.78 0.15 300);
+  --vibe-text: oklch(0.99 0 0);
+  --vibe-muted: oklch(0.85 0.05 290 / 0.75);
+}
+[data-vibe="event"] {
+  --vibe-bg-from: oklch(0.6 0.24 350);
+  --vibe-bg-to: oklch(0.42 0.22 320);
+  --vibe-accent: oklch(0.92 0.12 90);
+  --vibe-text: oklch(0.99 0 0);
+  --vibe-muted: oklch(0.94 0.06 340 / 0.8);
 }
 
 @layer base {
@@ -137,8 +151,54 @@
     border-color: var(--color-border);
   }
 
-  body {
+  html, body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Utility: glass card used by Vibe Card */
+@layer components {
+  .vibe-glass {
+    background: linear-gradient(135deg,
+      color-mix(in oklab, var(--vibe-bg-from) 92%, transparent),
+      color-mix(in oklab, var(--vibe-bg-to) 92%, transparent));
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid color-mix(in oklab, var(--vibe-text) 18%, transparent);
+    box-shadow:
+      0 30px 60px -20px color-mix(in oklab, var(--vibe-bg-to) 50%, transparent),
+      inset 0 1px 0 color-mix(in oklab, var(--vibe-text) 25%, transparent);
+  }
+
+  .vibe-pattern-dots {
+    background-image: radial-gradient(
+      color-mix(in oklab, var(--vibe-text) 14%, transparent) 1px,
+      transparent 1px
+    );
+    background-size: 18px 18px;
+  }
+  .vibe-pattern-rain {
+    background-image: repeating-linear-gradient(
+      115deg,
+      color-mix(in oklab, var(--vibe-text) 10%, transparent) 0 1px,
+      transparent 1px 9px
+    );
+  }
+  .vibe-pattern-stars {
+    background-image:
+      radial-gradient(color-mix(in oklab, var(--vibe-accent) 50%, transparent) 1px, transparent 1.5px),
+      radial-gradient(color-mix(in oklab, var(--vibe-text) 25%, transparent) 1px, transparent 1.5px);
+    background-size: 38px 38px, 22px 22px;
+    background-position: 0 0, 11px 11px;
+  }
+  .vibe-pattern-confetti {
+    background-image:
+      radial-gradient(color-mix(in oklab, var(--vibe-accent) 70%, transparent) 2px, transparent 2.5px),
+      radial-gradient(color-mix(in oklab, var(--vibe-text) 40%, transparent) 1.5px, transparent 2px);
+    background-size: 28px 28px, 44px 44px;
+    background-position: 0 0, 14px 14px;
   }
 }
