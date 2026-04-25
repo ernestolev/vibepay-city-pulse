@@ -1,10 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Bell, Eye, EyeOff, Plus, Send, ArrowDownLeft, QrCode, Sparkles } from "lucide-react";
+import {
+  Bell,
+  Eye,
+  EyeOff,
+  Plus,
+  Send,
+  ArrowDownLeft,
+  QrCode,
+  Sparkles,
+  Sun,
+  CloudRain,
+  Trophy,
+  Moon,
+  X,
+} from "lucide-react";
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { MobileShell } from "@/components/mobile-shell";
-import { VibeCard } from "@/components/vibe-card";
-import { useVibe } from "@/lib/vibe-context";
+import { getContextualOffer } from "@/lib/vibeEngine";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -24,8 +37,20 @@ const QUICK = [
 ] as const;
 
 function HomePage() {
-  const { vibe } = useVibe();
+  const [currentVibe, setCurrentVibe] = useState("sunny");
   const [showBalance, setShowBalance] = useState(true);
+  const [isQrOpen, setIsQrOpen] = useState(false);
+  const offer = getContextualOffer(currentVibe);
+  const qrCells = Array.from({ length: 81 }, (_, i) => {
+    const row = Math.floor(i / 9);
+    const col = i % 9;
+    const finder =
+      (row < 3 && col < 3) ||
+      (row < 3 && col > 5) ||
+      (row > 5 && col < 3);
+    const pattern = (row * 3 + col * 5 + currentVibe.length) % 4 === 0;
+    return finder || pattern;
+  });
 
   return (
     <MobileShell>
@@ -80,19 +105,33 @@ function HomePage() {
         </div>
       </header>
 
-      <main className="px-5 pt-6">
+      <main className="px-5 pb-28 pt-6">
         {/* Vibe Card section */}
         <div className="mb-3 flex items-center justify-between">
           <div>
             <h2 className="text-base font-bold">For you, right now</h2>
-            <p className="text-xs text-muted-foreground">Context: {vibe}</p>
+            <p className="text-xs text-muted-foreground">Context: {currentVibe}</p>
           </div>
           <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold uppercase text-accent-foreground">
             <Sparkles className="h-3 w-3" /> GenUI
           </span>
         </div>
 
-        <VibeCard vibe={vibe} />
+        <button
+          onClick={() => setIsQrOpen(true)}
+          className="rounded-3xl p-5 text-white shadow-lg transition-colors duration-500"
+          style={{ backgroundColor: offer.themeColor }}
+          aria-label="Open offer QR code"
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
+            Santander Pulse Offer
+          </p>
+          <h3 className="mt-2 text-xl font-bold leading-tight">{offer.title}</h3>
+          <p className="mt-2 text-sm text-white/90">{offer.description}</p>
+          <div className="mt-4 inline-flex items-center rounded-full bg-white/18 px-3 py-1.5 text-xs font-semibold backdrop-blur">
+            {offer.discount}
+          </div>
+        </button>
 
         {/* Recent activity preview */}
         <section className="mt-7">
@@ -135,6 +174,101 @@ function HomePage() {
           </ul>
         </section>
       </main>
+
+      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-20 flex justify-center px-4">
+        <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-border/60 bg-card/95 p-2 shadow-xl backdrop-blur">
+          <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Simulate City Pulse
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            <button
+              onClick={() => setCurrentVibe("sunny")}
+              className={`flex items-center justify-center rounded-xl py-2 transition ${
+                currentVibe === "sunny" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+              }`}
+              aria-label="Set sunny vibe"
+            >
+              <Sun className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setCurrentVibe("rainy")}
+              className={`flex items-center justify-center rounded-xl py-2 transition ${
+                currentVibe === "rainy" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+              }`}
+              aria-label="Set rainy vibe"
+            >
+              <CloudRain className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setCurrentVibe("event")}
+              className={`flex items-center justify-center rounded-xl py-2 transition ${
+                currentVibe === "event" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+              }`}
+              aria-label="Set event vibe"
+            >
+              <Trophy className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setCurrentVibe("night")}
+              className={`flex items-center justify-center rounded-xl py-2 transition ${
+                currentVibe === "night" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+              }`}
+              aria-label="Set night vibe"
+            >
+              <Moon className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {isQrOpen ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-30 flex items-end justify-center bg-black/50 p-4"
+            onClick={() => setIsQrOpen(false)}
+          >
+            <motion.section
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 32, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 260, damping: 24 }}
+              className="w-full max-w-sm rounded-3xl bg-card p-5 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-sm font-semibold">Scan to redeem</p>
+                <button
+                  onClick={() => setIsQrOpen(false)}
+                  className="rounded-full bg-muted p-2 text-muted-foreground transition hover:text-foreground"
+                  aria-label="Close QR modal"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mx-auto mb-4 grid w-48 grid-cols-9 gap-1 rounded-2xl bg-white p-3">
+                {qrCells.map((filled, idx) => (
+                  <div key={idx} className={`h-4 w-4 rounded-[2px] ${filled ? "bg-black" : "bg-white"}`} />
+                ))}
+              </div>
+
+              <p className="text-center text-sm font-medium text-foreground">
+                Pay with VibePay at {offer.merchantName} to redeem your {offer.discount}.
+              </p>
+
+              <div className="mt-5 flex justify-center">
+                <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Sparkles className="h-3 w-3" />
+                  Simulated by Payone
+                </span>
+              </div>
+            </motion.section>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </MobileShell>
   );
 }
