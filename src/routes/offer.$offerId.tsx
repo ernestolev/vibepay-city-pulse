@@ -2,7 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { ArrowLeft, MapPin, Clock, BadgeCheck, ShieldCheck } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { VIBES } from "@/lib/vibe";
+import { VIBES, type VibeOffer } from "@/lib/vibe";
 
 export const Route = createFileRoute("/offer/$offerId")({
   head: ({ params }) => {
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/offer/$offerId")({
       ],
     };
   },
-  loader: ({ params }) => {
+  loader: ({ params }): VibeOffer => {
     const offer = Object.values(VIBES).find((o) => o.id === params.offerId);
     if (!offer) throw notFound();
     return offer;
@@ -34,7 +34,7 @@ export const Route = createFileRoute("/offer/$offerId")({
 });
 
 function OfferPage() {
-  const offer = Route.useLoaderData();
+  const offer = Route.useLoaderData() as VibeOffer;
   const Icon = offer.icon;
   const code = `VIBE-${offer.id.toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 

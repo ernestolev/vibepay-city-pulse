@@ -118,32 +118,28 @@
 
 /* Vibe themes — applied to <html data-vibe="..."> */
 [data-vibe="sunny"] {
-  --vibe-bg-from: oklch(0.82 0.14 80);
+  /* Warm orange sunset */
+  --vibe-bg-from: oklch(0.82 0.16 75);
   --vibe-bg-to: oklch(0.62 0.21 35);
-  --vibe-accent: oklch(0.98 0.06 90);
+  --vibe-accent: oklch(0.98 0.07 90);
   --vibe-text: oklch(0.99 0 0);
-  --vibe-muted: oklch(0.96 0.04 80 / 0.85);
+  --vibe-muted: oklch(0.97 0.04 80 / 0.88);
 }
 [data-vibe="rainy"] {
-  --vibe-bg-from: oklch(0.55 0.1 240);
-  --vibe-bg-to: oklch(0.32 0.08 250);
-  --vibe-accent: oklch(0.85 0.09 230);
+  /* Deep glassmorphism blue */
+  --vibe-bg-from: oklch(0.58 0.11 235);
+  --vibe-bg-to: oklch(0.30 0.09 255);
+  --vibe-accent: oklch(0.86 0.09 225);
   --vibe-text: oklch(0.99 0 0);
-  --vibe-muted: oklch(0.9 0.04 230 / 0.75);
-}
-[data-vibe="nighttime"] {
-  --vibe-bg-from: oklch(0.28 0.07 285);
-  --vibe-bg-to: oklch(0.16 0.05 270);
-  --vibe-accent: oklch(0.78 0.15 300);
-  --vibe-text: oklch(0.99 0 0);
-  --vibe-muted: oklch(0.85 0.05 290 / 0.75);
+  --vibe-muted: oklch(0.92 0.04 230 / 0.78);
 }
 [data-vibe="event"] {
-  --vibe-bg-from: oklch(0.6 0.24 350);
-  --vibe-bg-to: oklch(0.42 0.22 320);
-  --vibe-accent: oklch(0.92 0.12 90);
+  /* Santander red pulse */
+  --vibe-bg-from: oklch(0.64 0.24 28);
+  --vibe-bg-to: oklch(0.40 0.22 27);
+  --vibe-accent: oklch(0.96 0.05 85);
   --vibe-text: oklch(0.99 0 0);
-  --vibe-muted: oklch(0.94 0.06 340 / 0.8);
+  --vibe-muted: oklch(0.95 0.05 25 / 0.82);
 }
 
 @layer base {
@@ -187,18 +183,28 @@
       transparent 1px 9px
     );
   }
-  .vibe-pattern-stars {
-    background-image:
-      radial-gradient(color-mix(in oklab, var(--vibe-accent) 50%, transparent) 1px, transparent 1.5px),
-      radial-gradient(color-mix(in oklab, var(--vibe-text) 25%, transparent) 1px, transparent 1.5px);
-    background-size: 38px 38px, 22px 22px;
-    background-position: 0 0, 11px 11px;
-  }
   .vibe-pattern-confetti {
     background-image:
       radial-gradient(color-mix(in oklab, var(--vibe-accent) 70%, transparent) 2px, transparent 2.5px),
       radial-gradient(color-mix(in oklab, var(--vibe-text) 40%, transparent) 1.5px, transparent 2px);
     background-size: 28px 28px, 44px 44px;
     background-position: 0 0, 14px 14px;
+  }
+
+  /* Red pulse halo for the Match Day vibe */
+  .vibe-pulse::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--vibe-bg-from) 60%, transparent);
+    animation: vibePulse 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  }
+
+  @keyframes vibePulse {
+    0%   { box-shadow: 0 0 0 0   color-mix(in oklab, var(--vibe-bg-from) 55%, transparent); }
+    70%  { box-shadow: 0 0 0 18px color-mix(in oklab, var(--vibe-bg-from) 0%,  transparent); }
+    100% { box-shadow: 0 0 0 0   color-mix(in oklab, var(--vibe-bg-from) 0%,  transparent); }
   }
 }

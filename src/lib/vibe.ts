@@ -1,90 +1,86 @@
-import { CloudRain, Sun, Moon, Sparkles, Coffee, IceCream, Pizza, Music } from "lucide-react";
+import { CloudRain, Sun, Coffee, Trophy, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type VibeKey = "sunny" | "rainy" | "nighttime" | "event";
+export type VibeKey = "sunny" | "rainy" | "event";
 
 export type VibeOffer = {
   id: string;
   vibe: VibeKey;
+  brand: string;
   title: string;
   merchant: string;
   description: string;
   discount: string;
   cashback: string;
-  pattern: "dots" | "rain" | "stars" | "confetti";
+  pattern: "dots" | "rain" | "confetti";
   icon: LucideIcon;
   weatherIcon: LucideIcon;
   weatherLabel: string;
   tagline: string;
   distance: string;
   expires: string;
+  /** Code embedded in the QR for redemption (mock). */
+  redemptionCode: string;
 };
 
 export const VIBES: Record<VibeKey, VibeOffer> = {
   sunny: {
-    id: "sunny-iced-coffee",
+    id: "sunny-gelatto-2x1",
     vibe: "sunny",
-    title: "Iced Coffee on us",
-    merchant: "Shop Y Coffee Co.",
-    description: "Beat the heat. Enjoy a free upgrade to any iced specialty drink, today only.",
-    discount: "100% OFF",
+    brand: "Santander Pulse",
+    title: "2x1 Ice Cream",
+    merchant: "Gelatto",
+    description:
+      "It's a hot one — bring a friend and grab two scoops for the price of one at any Gelatto in town.",
+    discount: "2x1 OFFER",
     cashback: "+ £1.20 cashback",
     pattern: "dots",
-    icon: IceCream,
+    icon: Sun,
     weatherIcon: Sun,
     weatherLabel: "28° · Sunny",
-    tagline: "It's hot out there ☀️",
-    distance: "120m away",
-    expires: "Expires in 2h 14m",
+    tagline: "Santander Pulse · It's hot out there",
+    distance: "Gelatto · 120m away",
+    expires: "Expires today, 22:00",
+    redemptionCode: "VIBEPAY-SUN-2X1-GELATTO-4421",
   },
   rainy: {
-    id: "rainy-hot-chocolate",
+    id: "rainy-lacentral-coffee",
     vibe: "rainy",
-    title: "Hot Chocolate, half price",
-    merchant: "Cafe X",
-    description: "A rainy afternoon calls for something warm. 50% off any hot drink at Cafe X.",
-    discount: "50% OFF",
-    cashback: "+ £0.80 cashback",
+    brand: "Rainy Discount",
+    title: "Free Coffee",
+    merchant: "La Central",
+    description:
+      "Dry off with a complimentary house coffee at La Central. Settled instantly via Payone — no codes, no fuss.",
+    discount: "FREE COFFEE",
+    cashback: "via Payone",
     pattern: "rain",
     icon: Coffee,
     weatherIcon: CloudRain,
     weatherLabel: "12° · Rainy",
-    tagline: "Stay cosy, it's pouring 🌧️",
-    distance: "80m away",
-    expires: "Expires in 3h 02m",
-  },
-  nighttime: {
-    id: "night-late-bites",
-    vibe: "nighttime",
-    title: "Late-night slice",
-    merchant: "Luna Pizzeria",
-    description: "After 9pm? Grab any slice for £2 and a free soft drink. Open till late.",
-    discount: "£2 SLICE",
-    cashback: "+ £0.50 cashback",
-    pattern: "stars",
-    icon: Pizza,
-    weatherIcon: Moon,
-    weatherLabel: "11° · Clear night",
-    tagline: "The city's quiet — your turn 🌙",
-    distance: "350m away",
-    expires: "Expires at 02:00",
+    tagline: "Rainy Discount · Stay cosy",
+    distance: "La Central · 80m away",
+    expires: "Valid while it rains",
+    redemptionCode: "VIBEPAY-RAIN-FREECOFFEE-LACENTRAL-4421",
   },
   event: {
-    id: "event-music-pass",
+    id: "event-stadium-cashback",
     vibe: "event",
-    title: "Festival fast-pass",
-    merchant: "Riverside Live",
-    description: "Skip the queue at Riverside Live tonight + get a free welcome drink.",
-    discount: "FAST PASS",
-    cashback: "+ £3.00 cashback",
+    brand: "Match Day",
+    title: "20% Cashback",
+    merchant: "The Stadium",
+    description:
+      "It's match day. Tap to pay anywhere inside The Stadium and get 20% back, settled via Payone.",
+    discount: "20% CASHBACK",
+    cashback: "Match Day boost",
     pattern: "confetti",
-    icon: Music,
+    icon: Trophy,
     weatherIcon: Sparkles,
-    weatherLabel: "Event nearby",
-    tagline: "Something's happening tonight ✨",
-    distance: "Riverside · 600m",
-    expires: "Doors close 23:00",
+    weatherLabel: "Live · Match Day",
+    tagline: "Match Day · The city is buzzing",
+    distance: "The Stadium · 600m",
+    expires: "Until full-time, 22:30",
+    redemptionCode: "VIBEPAY-EVENT-CASHBACK-STADIUM-4421",
   },
 };
 
-export const VIBE_ORDER: VibeKey[] = ["sunny", "rainy", "nighttime", "event"];
+export const VIBE_ORDER: VibeKey[] = ["sunny", "rainy", "event"];

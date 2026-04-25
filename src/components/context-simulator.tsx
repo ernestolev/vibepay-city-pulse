@@ -1,109 +1,85 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, X, CloudRain, Sun, Moon } from "lucide-react";
+import { motion } from "framer-motion";
+import { Sun, CloudRain, Trophy, Radio } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useVibe } from "@/lib/vibe-context";
-import { VIBE_ORDER, type VibeKey } from "@/lib/vibe";
+import type { VibeKey } from "@/lib/vibe";
 
-const META: Record<VibeKey, { label: string; icon: typeof Sun; hint: string }> = {
-  sunny: { label: "Sunny / Hot", icon: Sun, hint: "Iced drinks, parks, light bites" },
-  rainy: { label: "Rainy", icon: CloudRain, hint: "Hot drinks, indoor cafes" },
-  nighttime: { label: "Nighttime", icon: Moon, hint: "Late bites, taxis, bars" },
-  event: { label: "Event Nearby", icon: Sparkles, hint: "Festival, gig, fast-passes" },
-};
+type Pulse = { key: VibeKey; label: string; icon: LucideIcon };
 
+const PULSES: Pulse[] = [
+  { key: "sunny", label: "Sunny", icon: Sun },
+  { key: "rainy", label: "Rainy", icon: CloudRain },
+  { key: "event", label: "Event", icon: Trophy },
+];
+
+/**
+ * Floating "City Pulse" demo bar — lets judges flip between the three
+ * contexts that drive the Vibe Engine in real time.
+ */
 export function ContextSimulator() {
-  const [open, setOpen] = useState(false);
   const { vibe, setVibe } = useVibe();
 
   return (
-    <>
-      {/* Floating trigger — visible to judges */}
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-3 text-xs font-semibold text-background shadow-2xl shadow-black/30 transition active:scale-95"
-        aria-label="Simulate City Pulse"
+    <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 mx-auto flex max-w-md justify-center px-4">
+      <motion.div
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
+        className="pointer-events-auto w-full"
       >
-        <Sparkles className="h-4 w-4" />
-        Simulate City Pulse
-      </button>
+        <div className="rounded-3xl border border-border bg-card/95 p-3 shadow-2xl shadow-black/25 backdrop-blur-xl ring-1 ring-black/5">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
+                City Pulse
+              </span>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <Radio className="h-2.5 w-2.5" />
+              Demo
+            </span>
+          </div>
 
-      <AnimatePresence>
-        {open && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setOpen(false)}
-              className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 280 }}
-              className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md rounded-t-3xl bg-card p-5 pb-8 shadow-2xl"
-            >
-              <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-border" />
-              <div className="mb-4 flex items-start justify-between">
-                <div>
-                  <h2 className="text-lg font-bold">Simulate City Pulse</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Toggle a context to see VibePay adapt instantly.
-                  </p>
-                </div>
+          <div className="relative grid grid-cols-3 gap-1 rounded-2xl bg-muted/70 p-1">
+            {PULSES.map(({ key, label, icon: Icon }) => {
+              const active = vibe === key;
+              return (
                 <button
-                  onClick={() => setOpen(false)}
-                  className="rounded-full bg-muted p-2 text-muted-foreground"
-                  aria-label="Close"
+                  key={key}
+                  onClick={() => setVibe(key)}
+                  aria-pressed={active}
+                  aria-label={`Switch to ${label} vibe`}
+                  className="relative flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-2.5 text-xs font-semibold transition"
                 >
-                  <X className="h-4 w-4" />
+                  {active && (
+                    <motion.span
+                      layoutId="city-pulse-active"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                      className="absolute inset-0 rounded-xl bg-primary shadow-md shadow-primary/30"
+                    />
+                  )}
+                  <Icon
+                    className={`relative z-10 h-4 w-4 ${
+                      active ? "text-primary-foreground" : "text-foreground"
+                    }`}
+                  />
+                  <span
+                    className={`relative z-10 ${
+                      active ? "text-primary-foreground" : "text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </span>
                 </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                {VIBE_ORDER.map((key) => {
-                  const m = META[key];
-                  const Icon = m.icon;
-                  const active = vibe === key;
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => setVibe(key)}
-                      className={`relative rounded-2xl border p-4 text-left transition ${
-                        active
-                          ? "border-primary bg-accent"
-                          : "border-border bg-surface hover:border-primary/40"
-                      }`}
-                    >
-                      <div
-                        className={`mb-2 inline-flex h-9 w-9 items-center justify-center rounded-xl ${
-                          active ? "bg-primary text-primary-foreground" : "bg-card text-foreground"
-                        }`}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="text-sm font-semibold">{m.label}</div>
-                      <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                        {m.hint}
-                      </div>
-                      {active && (
-                        <span className="absolute right-3 top-3 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase text-primary-foreground">
-                          Live
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <p className="mt-4 text-center text-[11px] text-muted-foreground">
-                Demo mode · Context normally derived from weather, time & location.
-              </p>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </>
+              );
+            })}
+          </div>
+        </div>
+      </motion.div>
+    </div>
   );
 }
