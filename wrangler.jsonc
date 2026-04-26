@@ -1,3 +1,4 @@
+// Solo para despliegue en Cloudflare Workers. En Vercel usa `npm run build` (Nitro preset `vercel`).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "tanstack-start-app",
