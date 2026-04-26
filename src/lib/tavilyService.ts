@@ -1,5 +1,12 @@
+import type { LocalMerchant } from "./merchantData";
+
 type WeatherVibe = "sunny" | "rainy" | "cloudy";
-type PulseContext = WeatherVibe | "cold";
+export type PulseContext =
+  | WeatherVibe
+  | "cold"
+  | "morning"
+  | "evening"
+  | "night";
 
 export interface CityVibe {
   weather: WeatherVibe;
@@ -21,12 +28,12 @@ interface TavilyResponse {
 
 const FALLBACK_VIBE: CityVibe = {
   weather: "cloudy",
-  topEvent: "No major nearby event detected",
+  topEvent: "Quiet morning in Old Town · steady local foot traffic",
   city: "Stuttgart, Germany",
   temperatureC: 11,
   cafeName: "Kaffeehaus Altstadt",
   recommendation:
-    "Cold vibe detected (11°C overcast): prioritize a warm and cozy coffee journey near Stuttgart Old Town.",
+    "Cold vibe detected (11°C overcast): surface a quiet family-run café near Stuttgart Old Town to support local merchants.",
 };
 
 function inferWeather(text: string): WeatherVibe {
@@ -44,16 +51,18 @@ function inferWeather(text: string): WeatherVibe {
 }
 
 function pickTopEvent(results: TavilySearchResult[]): string {
-  const eventLike = results.find((r) => {
+  const hotspot = results.find((r) => {
     const combined = `${r.title ?? ""} ${r.content ?? ""}`.toLowerCase();
-    return /(concert|festival|match|game|expo|conference|event|fair|show)/.test(combined);
+    return /(festival|market|markt|fair|christmas market|weihnachtsmarkt|food fest|street food|night market|expo|conference|gallery|opening)/.test(
+      combined,
+    );
   });
 
-  if (!eventLike) {
+  if (!hotspot) {
     return FALLBACK_VIBE.topEvent;
   }
 
-  return (eventLike.title || eventLike.content || FALLBACK_VIBE.topEvent).slice(0, 140);
+  return (hotspot.title || hotspot.content || FALLBACK_VIBE.topEvent).slice(0, 140);
 }
 
 function pickCafeName(results: TavilySearchResult[]): string {
@@ -84,9 +93,16 @@ export async function getCityVibe(city: string, pulseContext?: PulseContext): Pr
   }
 
   const isColdOrOvercastContext = pulseContext === "cold" || pulseContext === "cloudy";
-  const query = isColdOrOvercastContext
-    ? "Best rated local coffee shops in Stuttgart Old Town with current status"
-    : `current weather and main events in ${city} right now for a banking app context`;
+  const query =
+    pulseContext === "morning"
+      ? `Top rated independent bakeries and family cafés open right now in ${city} Old Town`
+      : pulseContext === "evening"
+        ? `Cosy local cafés and family bistros open this evening in ${city} Old Town`
+        : pulseContext === "night"
+          ? `Family-run Weinstube and small local restaurants open late in ${city} Old Town`
+          : isColdOrOvercastContext
+            ? `Best independent coffee shops and family-run cafés in ${city} Old Town right now`
+            : `Independent restaurants, family bistros and local merchants currently busy in ${city} Old Town`;
 
   try {
     const response = await fetch("https://api.tavily.com/search", {
@@ -114,10 +130,10 @@ export async function getCityVibe(city: string, pulseContext?: PulseContext): Pr
 
     const recommendation =
       weather === "rainy"
-        ? "Rain detected: prioritize nearby warm indoor merchants (coffee, transit hubs) with instant Payone-settled rewards."
+        ? "Rain detected in Old Town: route Mia to a warm family-run café or bakery, settled instantly via Payone Riel."
         : weather === "sunny"
-          ? "Sunny conditions: promote outdoor spend categories and time-limited cashback around high footfall zones."
-          : "Cloudy city pulse: surface versatile daily offers near commuting routes and current local events.";
+          ? "Sunny pulse in Old Town: surface independent terraces, gelaterias and local market stalls within walking distance."
+          : "Cloudy Old Town pulse: prioritise quiet family-run cafés and independent restaurants — keep traffic flowing to local Mittelstand.";
 
     return {
       weather,
@@ -129,5 +145,61 @@ export async function getCityVibe(city: string, pulseContext?: PulseContext): Pr
     };
   } catch {
     return FALLBACK_VIBE;
+  }
+}
+
+export interface MerchantContextSnippet {
+  merchantId: string;
+  liveSnippet: string;
+  source: "tavily" | "fallback";
+}
+
+const MAX_MERCHANT_SNIPPET_LEN = 140;
+
+export async function searchMerchantContext(
+  merchant: LocalMerchant,
+  city = "Stuttgart",
+): Promise<MerchantContextSnippet> {
+  const apiKey = import.meta.env.VITE_TAVILY_API_KEY;
+  const fallback: MerchantContextSnippet = {
+    merchantId: merchant.id,
+    liveSnippet: merchant.fallbackMessage,
+    source: "fallback",
+  };
+
+  if (!apiKey) return fallback;
+
+  const query = `${merchant.name} ${city} Old Town current status hours offers ${merchant.category}`;
+
+  try {
+    const response = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        query,
+        search_depth: "basic",
+        max_results: 3,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Tavily request failed with status ${response.status}`);
+    }
+
+    const data = (await response.json()) as TavilyResponse;
+    const first = data.results?.[0];
+    const snippet =
+      (first?.content || first?.title || merchant.fallbackMessage).trim();
+
+    return {
+      merchantId: merchant.id,
+      liveSnippet: snippet.slice(0, MAX_MERCHANT_SNIPPET_LEN),
+      source: "tavily",
+    };
+  } catch {
+    return fallback;
   }
 }

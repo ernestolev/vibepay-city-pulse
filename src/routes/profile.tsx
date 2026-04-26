@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ChevronRight, Shield, CreditCard, Bell, HelpCircle, LogOut, Sparkles } from "lucide-react";
 import { MobileShell } from "@/components/mobile-shell";
+import { PayoneSeal } from "@/components/payone-seal";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -32,10 +33,13 @@ function ProfilePage() {
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 text-lg font-bold">
             AM
           </div>
-          <div>
+          <div className="flex-1">
             <p className="text-base font-semibold">Alex Morgan</p>
             <p className="text-xs opacity-80">alex.morgan@email.com</p>
           </div>
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide backdrop-blur">
+            <span className="font-bold tracking-[0.18em]">PAYONE</span> rail
+          </span>
         </div>
         <div className="mt-4 grid grid-cols-3 gap-3 text-center text-xs">
           {[
@@ -72,6 +76,19 @@ function ProfilePage() {
         <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card p-4 text-sm font-semibold text-primary">
           <LogOut className="h-4 w-4" /> Sign out
         </button>
+
+        <div className="mt-6 rounded-2xl border border-border bg-surface px-4 py-3">
+          <p className="text-[11px] font-semibold text-foreground">VibePay wallet</p>
+          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+            Your settlements clear instantly on{" "}
+            <span className="font-semibold text-foreground">Payone Riel</span>, the merchant rail
+            built and operated by DSV Gruppe. Same rail powers the live-traffic offer engine that
+            curates Mia's day.
+          </p>
+          <div className="mt-3 flex justify-end">
+            <PayoneSeal variant="wordmark" />
+          </div>
+        </div>
       </main>
     </MobileShell>
   );

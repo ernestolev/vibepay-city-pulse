@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as OffersRouteImport } from './routes/offers'
+import { Route as MerchantRouteImport } from './routes/merchant'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as OfferOfferIdRouteImport } from './routes/offer.$offerId'
@@ -23,6 +24,11 @@ const ProfileRoute = ProfileRouteImport.update({
 const OffersRoute = OffersRouteImport.update({
   id: '/offers',
   path: '/offers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MerchantRoute = MerchantRouteImport.update({
+  id: '/merchant',
+  path: '/merchant',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ActivityRoute = ActivityRouteImport.update({
@@ -44,6 +50,7 @@ const OfferOfferIdRoute = OfferOfferIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/merchant': typeof MerchantRoute
   '/offers': typeof OffersRoute
   '/profile': typeof ProfileRoute
   '/offer/$offerId': typeof OfferOfferIdRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/merchant': typeof MerchantRoute
   '/offers': typeof OffersRoute
   '/profile': typeof ProfileRoute
   '/offer/$offerId': typeof OfferOfferIdRoute
@@ -59,19 +67,33 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/merchant': typeof MerchantRoute
   '/offers': typeof OffersRoute
   '/profile': typeof ProfileRoute
   '/offer/$offerId': typeof OfferOfferIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/activity' | '/offers' | '/profile' | '/offer/$offerId'
+  fullPaths:
+    | '/'
+    | '/activity'
+    | '/merchant'
+    | '/offers'
+    | '/profile'
+    | '/offer/$offerId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/activity' | '/offers' | '/profile' | '/offer/$offerId'
+  to:
+    | '/'
+    | '/activity'
+    | '/merchant'
+    | '/offers'
+    | '/profile'
+    | '/offer/$offerId'
   id:
     | '__root__'
     | '/'
     | '/activity'
+    | '/merchant'
     | '/offers'
     | '/profile'
     | '/offer/$offerId'
@@ -80,6 +102,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ActivityRoute: typeof ActivityRoute
+  MerchantRoute: typeof MerchantRoute
   OffersRoute: typeof OffersRoute
   ProfileRoute: typeof ProfileRoute
   OfferOfferIdRoute: typeof OfferOfferIdRoute
@@ -99,6 +122,13 @@ declare module '@tanstack/react-router' {
       path: '/offers'
       fullPath: '/offers'
       preLoaderRoute: typeof OffersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/merchant': {
+      id: '/merchant'
+      path: '/merchant'
+      fullPath: '/merchant'
+      preLoaderRoute: typeof MerchantRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/activity': {
@@ -128,6 +158,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ActivityRoute: ActivityRoute,
+  MerchantRoute: MerchantRoute,
   OffersRoute: OffersRoute,
   ProfileRoute: ProfileRoute,
   OfferOfferIdRoute: OfferOfferIdRoute,

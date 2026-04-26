@@ -2,6 +2,8 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/r
 
 import appCss from "../styles.css?url";
 import { VibeProvider } from "@/lib/vibe-context";
+import { AppProvider } from "@/lib/app-context";
+import { MerchantRulesProvider } from "@/lib/merchant-rules-context";
 
 function NotFoundComponent() {
   return (
@@ -71,8 +73,12 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   return (
-    <VibeProvider>
-      <Outlet />
-    </VibeProvider>
+    <MerchantRulesProvider>
+      <AppProvider>
+        <VibeProvider>
+          <Outlet />
+        </VibeProvider>
+      </AppProvider>
+    </MerchantRulesProvider>
   );
 }
