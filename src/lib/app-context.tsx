@@ -8,6 +8,24 @@ import {
 } from "react";
 import { MIA_HOME, type GeoPoint, type LocalMerchant } from "./merchantData";
 
+/** iOS-style boot: lock → home grid → in-app (wallet). */
+export type DeviceBootStage = "lock" | "springboard" | "inApp";
+
+function getInitialDeviceBootStage(): DeviceBootStage {
+  if (typeof window === "undefined") return "inApp";
+  try {
+    if (new URLSearchParams(window.location.search).get("nodevice") === "1") {
+      return "inApp";
+    }
+    if (sessionStorage.getItem("vibepay_device_boot") === "1") {
+      return "inApp";
+    }
+  } catch {
+    return "inApp";
+  }
+  return "lock";
+}
+
 export interface PushNotification {
   id: string;
   title: string;
@@ -53,6 +71,12 @@ export interface AppState {
   markMerchantNotified: (id: string) => void;
   clearNotifiedMerchants: () => void;
   resetWalkSession: () => void;
+
+  deviceBootStage: DeviceBootStage;
+  setDeviceBootStage: (s: DeviceBootStage) => void;
+  enterAppFromBoot: () => void;
+  /** Clears session flag and returns to the lock screen (jury / demo again). */
+  replayDeviceBoot: () => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -60,6 +84,7 @@ const AppContext = createContext<AppState | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [simulatedTime, setSimulatedTime] = useState<string | null>(null);
+  const [deviceBootStage, setDeviceBootStage] = useState<DeviceBootStage>(getInitialDeviceBootStage);
 
   const [miaOrigin, setMiaOriginState] = useState<GeoPoint>(MIA_HOME);
   const [miaPosition, setMiaPosition] = useState<GeoPoint>(MIA_HOME);
@@ -110,6 +135,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setNotifiedMerchantIds(new Set());
   }, [miaOrigin]);
 
+  const enterAppFromBoot = useCallback(() => {
+    try {
+      sessionStorage.setItem("vibepay_device_boot", "1");
+    } catch {
+      /* ignore */
+    }
+    setDeviceBootStage("inApp");
+  }, []);
+
+  const replayDeviceBoot = useCallback(() => {
+    try {
+      sessionStorage.removeItem("vibepay_device_boot");
+    } catch {
+      /* ignore */
+    }
+    setDeviceBootStage("lock");
+  }, []);
+
   const value = useMemo<AppState>(
     () => ({
       isPresentationMode,
@@ -133,6 +176,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markMerchantNotified,
       clearNotifiedMerchants,
       resetWalkSession,
+      deviceBootStage,
+      setDeviceBootStage,
+      enterAppFromBoot,
+      replayDeviceBoot,
     }),
     [
       isPresentationMode,
@@ -150,6 +197,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markMerchantNotified,
       clearNotifiedMerchants,
       resetWalkSession,
+      deviceBootStage,
+      enterAppFromBoot,
+      replayDeviceBoot,
     ],
   );
 

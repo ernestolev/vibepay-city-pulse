@@ -58,6 +58,7 @@ export function ContextSimulator() {
     simulatedTime,
     setSimulatedTime,
     simulatedMerchant,
+    replayDeviceBoot,
   } = useAppContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isOwnerView = pathname.startsWith("/merchant");
@@ -182,6 +183,26 @@ export function ContextSimulator() {
                       isPresentationMode ? "left-[22px]" : "left-0.5"
                     }`}
                   />
+                </button>
+              </div>
+
+              <div className="mb-4 rounded-2xl border border-border bg-surface p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                  Device flow
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Replays the lock screen → home → open VibePay for the next demo. Same tab: next load
+                  skips intro until you replay.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    replayDeviceBoot();
+                    setOpen(false);
+                  }}
+                  className="mt-2 w-full rounded-xl border border-border bg-card py-2 text-xs font-semibold text-foreground transition hover:bg-muted"
+                >
+                  Replay iPhone intro (lock + home)
                 </button>
               </div>
 

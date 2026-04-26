@@ -4,6 +4,8 @@ import appCss from "../styles.css?url";
 import { VibeProvider } from "@/lib/vibe-context";
 import { AppProvider } from "@/lib/app-context";
 import { MerchantRulesProvider } from "@/lib/merchant-rules-context";
+import { SimulatorStateBridge } from "@/components/simulator-state-bridge";
+import { DeviceBootLayer } from "@/components/device-boot-layer";
 
 function NotFoundComponent() {
   return (
@@ -76,7 +78,9 @@ function RootComponent() {
     <MerchantRulesProvider>
       <AppProvider>
         <VibeProvider>
+          <SimulatorStateBridge />
           <Outlet />
+          <DeviceBootLayer />
         </VibeProvider>
       </AppProvider>
     </MerchantRulesProvider>

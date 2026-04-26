@@ -2,10 +2,22 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { getSupabase, isSupabaseConfigured } from "./supabaseClient";
+import {
+  type MerchantRow,
+  fetchMerchantsFromSupabase,
+  merchantToRow,
+  orderMerchants,
+  rowToMerchant,
+  ensureMerchantsSeeded,
+  upsertMerchant,
+  upsertMerchants,
+} from "./merchantSupabase";
 import { INITIAL_MERCHANTS, type LocalMerchant, type Occupancy } from "./merchantData";
 import type { OfferRule } from "./offerEngine";
 
@@ -45,31 +57,91 @@ function cloneMerchants(): LocalMerchant[] {
 export function MerchantRulesProvider({ children }: { children: ReactNode }) {
   const [merchants, setMerchants] = useState<LocalMerchant[]>(() => cloneMerchants());
 
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+    let cancelled = false;
+
+    (async () => {
+      let list = await fetchMerchantsFromSupabase();
+      if (cancelled) return;
+      // Empty table or first fetch hiccup: fill from INITIAL_MERCHANTS
+      if (!list || list.length === 0) {
+        await ensureMerchantsSeeded();
+        if (cancelled) return;
+        list = await fetchMerchantsFromSupabase();
+      }
+      if (cancelled) return;
+      if (list && list.length > 0) {
+        setMerchants(orderMerchants(list));
+      }
+    })();
+
+    const channel = supabase
+      .channel("vibepay-merchants")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "merchants" },
+        (payload) => {
+          if (payload.eventType === "DELETE" && payload.old) {
+            const id = (payload.old as { id: string }).id;
+            setMerchants((prev) => prev.filter((m) => m.id !== id));
+            return;
+          }
+          if (payload.new) {
+            const m = rowToMerchant(payload.new as MerchantRow);
+            setMerchants((prev) => {
+              const i = prev.findIndex((x) => x.id === m.id);
+              if (i === -1) return orderMerchants([...prev, m]);
+              const next = [...prev];
+              next[i] = m;
+              return next;
+            });
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      void supabase.removeChannel(channel);
+    };
+  }, []);
+
   const updateMerchant = useCallback(
     (merchantId: string, updater: Updater<LocalMerchant>) => {
-      setMerchants((prev) => prev.map((m) => (m.id === merchantId ? updater(m) : m)));
+      setMerchants((prev) => {
+        const next = prev.map((m) => (m.id === merchantId ? updater(m) : m));
+        const row = next.find((m) => m.id === merchantId);
+        if (row && isSupabaseConfigured()) void upsertMerchant(row);
+        return next;
+      });
     },
     [],
   );
 
   const updateRule = useCallback(
     (merchantId: string, ruleId: string, updater: Updater<OfferRule>) => {
-      setMerchants((prev) =>
-        prev.map((m) => {
+      setMerchants((prev) => {
+        const next = prev.map((m) => {
           if (m.id !== merchantId) return m;
           return {
             ...m,
             rules: m.rules.map((r) => (r.id === ruleId ? updater(r) : r)),
           };
-        }),
-      );
+        });
+        const row = next.find((m) => m.id === merchantId);
+        if (row && isSupabaseConfigured()) void upsertMerchant(row);
+        return next;
+      });
     },
     [],
   );
 
   const toggleRule = useCallback((merchantId: string, ruleId: string) => {
-    setMerchants((prev) =>
-      prev.map((m) => {
+    setMerchants((prev) => {
+      const next = prev.map((m) => {
         if (m.id !== merchantId) return m;
         return {
           ...m,
@@ -77,56 +149,84 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
             r.id === ruleId ? { ...r, enabled: !r.enabled } : r,
           ),
         };
-      }),
-    );
+      });
+      const row = next.find((m) => m.id === merchantId);
+      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      return next;
+    });
   }, []);
 
   const setOccupancy = useCallback((merchantId: string, occupancy: Occupancy) => {
-    setMerchants((prev) =>
-      prev.map((m) => (m.id === merchantId ? { ...m, occupancy } : m)),
-    );
+    setMerchants((prev) => {
+      const next = prev.map((m) => (m.id === merchantId ? { ...m, occupancy } : m));
+      const row = next.find((m) => m.id === merchantId);
+      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      return next;
+    });
   }, []);
 
   const setTransactionsToday = useCallback((merchantId: string, count: number) => {
     const safe = Math.max(0, Math.round(count));
-    setMerchants((prev) =>
-      prev.map((m) => (m.id === merchantId ? { ...m, currentTransactionsToday: safe } : m)),
-    );
+    setMerchants((prev) => {
+      const next = prev.map((m) =>
+        m.id === merchantId ? { ...m, currentTransactionsToday: safe } : m,
+      );
+      const row = next.find((m) => m.id === merchantId);
+      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      return next;
+    });
   }, []);
 
   const setLowTrafficThreshold = useCallback((merchantId: string, threshold: number) => {
     const safe = Math.max(1, Math.round(threshold));
-    setMerchants((prev) =>
-      prev.map((m) => (m.id === merchantId ? { ...m, lowTrafficThreshold: safe } : m)),
-    );
+    setMerchants((prev) => {
+      const next = prev.map((m) =>
+        m.id === merchantId ? { ...m, lowTrafficThreshold: safe } : m,
+      );
+      const row = next.find((m) => m.id === merchantId);
+      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      return next;
+    });
   }, []);
 
   const setDailyTargetReached = useCallback((merchantId: string, reached: boolean) => {
-    setMerchants((prev) =>
-      prev.map((m) => (m.id === merchantId ? { ...m, dailyTargetReached: reached } : m)),
-    );
+    setMerchants((prev) => {
+      const next = prev.map((m) =>
+        m.id === merchantId ? { ...m, dailyTargetReached: reached } : m,
+      );
+      const row = next.find((m) => m.id === merchantId);
+      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      return next;
+    });
   }, []);
 
   const incrementTransaction = useCallback((merchantId: string) => {
-    setMerchants((prev) =>
-      prev.map((m) =>
+    setMerchants((prev) => {
+      const next = prev.map((m) =>
         m.id === merchantId
           ? { ...m, currentTransactionsToday: m.currentTransactionsToday + 1 }
           : m,
-      ),
-    );
+      );
+      const row = next.find((m) => m.id === merchantId);
+      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      return next;
+    });
   }, []);
 
   const resetMerchant = useCallback((merchantId: string) => {
     setMerchants((prev) => {
       const fresh = cloneMerchants().find((m) => m.id === merchantId);
       if (!fresh) return prev;
-      return prev.map((m) => (m.id === merchantId ? fresh : m));
+      const next = prev.map((m) => (m.id === merchantId ? fresh : m));
+      if (isSupabaseConfigured()) void upsertMerchant(fresh);
+      return next;
     });
   }, []);
 
   const resetAll = useCallback(() => {
-    setMerchants(cloneMerchants());
+    const fresh = cloneMerchants();
+    setMerchants(fresh);
+    if (isSupabaseConfigured()) void upsertMerchants(fresh);
   }, []);
 
   const value = useMemo<MerchantRulesState>(
