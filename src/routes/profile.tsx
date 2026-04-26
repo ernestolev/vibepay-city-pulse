@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ChevronRight, Shield, CreditCard, Bell, HelpCircle, LogOut, Sparkles } from "lucide-react";
 import { MobileShell } from "@/components/mobile-shell";
+import { Switch } from "@/components/ui/switch";
+import { useVibe } from "@/lib/vibe-context";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -21,6 +23,9 @@ const ROWS = [
 ] as const;
 
 function ProfilePage() {
+  const { accountMode, setAccountMode } = useVibe();
+  const isBusinessMode = accountMode === "business";
+
   return (
     <MobileShell>
       <header className="px-5 pt-12 pb-2">
@@ -52,6 +57,24 @@ function ProfilePage() {
       </section>
 
       <main className="px-5 mt-6">
+        <section className="mb-4 rounded-2xl border border-border bg-card p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold">Business mode</p>
+              <p className="text-xs text-muted-foreground">
+                {isBusinessMode
+                  ? "Home and offers are now optimized for your business."
+                  : "Switch to business dashboards, metrics and offer management."}
+              </p>
+            </div>
+            <Switch
+              checked={isBusinessMode}
+              onCheckedChange={(checked) => setAccountMode(checked ? "business" : "personal")}
+              aria-label="Toggle business mode"
+            />
+          </div>
+        </section>
+
         <ul className="overflow-hidden rounded-2xl border border-border bg-card">
           {ROWS.map(({ icon: Icon, label, sub }) => (
             <li key={label}>

@@ -10,12 +10,30 @@ import {
   Sparkles,
   X,
   Waves,
+  Store,
+  Target,
+  TrendingUp,
+  TrendingDown,
+  Users,
+  Trophy,
+  Clock,
+  Percent,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MobileShell } from "@/components/mobile-shell";
 import { getContextualOffer } from "@/lib/vibeEngine";
 import { getCityVibe, type CityVibe } from "@/lib/tavilyService";
+import { useVibe } from "@/lib/vibe-context";
+import {
+  ACTIVE_CUSTOMERS_TODAY,
+  DAILY_INCOME_TARGET,
+  HOURLY_INCOME,
+  TOP_PRODUCT,
+  YESTERDAY_INCOME,
+  formatCurrency,
+  getBusinessDashboardMetrics,
+} from "@/lib/business-data";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -35,6 +53,8 @@ const QUICK = [
 ] as const;
 
 function HomePage() {
+  const { accountMode } = useVibe();
+  const isBusinessMode = accountMode === "business";
   const DEFAULT_PDF_PULSE: CityVibe = {
     city: "Stuttgart, Germany",
     weather: "cloudy",
@@ -124,6 +144,169 @@ function HomePage() {
       isMounted = false;
     };
   }, []);
+
+  const businessMetrics = getBusinessDashboardMetrics();
+  const coveragePercent = Math.min(Math.round(businessMetrics.coverageRate * 100), 100);
+
+  if (isBusinessMode) {
+    const isAheadOfYesterday = businessMetrics.dailyDelta >= 0;
+    const peakAmountValue = formatCurrency(businessMetrics.peakHourAmount);
+    const maxHourly = Math.max(...HOURLY_INCOME.map((h) => h.amount));
+
+    return (
+      <MobileShell>
+        <div className="min-h-screen bg-background font-sans text-foreground">
+          <header className="px-5 pb-2 pt-12">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card">
+                  <Store className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Business hub</p>
+                  <p className="text-sm font-semibold text-foreground">Mia&apos;s Coffee Lab</p>
+                </div>
+              </div>
+              <span className="rounded-full border border-border bg-card px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-primary">
+                Business mode
+              </span>
+            </div>
+          </header>
+
+          <main className="px-5 pb-28 pt-4">
+            <section className="rounded-3xl bg-primary p-5 text-primary-foreground">
+              <div className="flex items-center justify-between text-xs opacity-90">
+                <span className="uppercase tracking-[0.14em]">Income today</span>
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    isAheadOfYesterday ? "bg-white/20" : "bg-black/15"
+                  }`}
+                >
+                  {isAheadOfYesterday ? (
+                    <TrendingUp className="h-3 w-3" />
+                  ) : (
+                    <TrendingDown className="h-3 w-3" />
+                  )}
+                  {isAheadOfYesterday ? "+" : ""}
+                  {businessMetrics.dailyDeltaPercent.toFixed(1)}% vs yesterday
+                </span>
+              </div>
+              <p className="mt-2 text-3xl font-bold tracking-tight tabular-nums">
+                {formatCurrency(businessMetrics.incomeToday)}
+              </p>
+              <p className="mt-1 text-xs opacity-80">
+                Target {formatCurrency(DAILY_INCOME_TARGET)} · Yesterday {formatCurrency(YESTERDAY_INCOME)}
+              </p>
+              <div className="mt-4">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                  <div
+                    className="h-full rounded-full bg-white transition-all"
+                    style={{ width: `${coveragePercent}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[11px] opacity-90">
+                  <span>{coveragePercent}% covered</span>
+                  <span>
+                    {businessMetrics.goalReached
+                      ? "Daily target reached"
+                      : `${formatCurrency(businessMetrics.incomeGap)} to go`}
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <BusinessKpi
+                title="Avg ticket"
+                value={formatCurrency(businessMetrics.averageTicket)}
+                helper={`${businessMetrics.transactionsToday} transactions`}
+                icon={Target}
+              />
+              <BusinessKpi
+                title="Active customers"
+                value={`${ACTIVE_CUSTOMERS_TODAY}`}
+                helper="Unique today"
+                icon={Users}
+              />
+              <BusinessKpi
+                title="Peak hour"
+                value={businessMetrics.peakHourLabel}
+                helper={`${peakAmountValue} sold`}
+                icon={Clock}
+              />
+              <BusinessKpi
+                title="Offer conversion"
+                value={`${businessMetrics.conversionRate.toFixed(0)}%`}
+                helper="Redeemed / views"
+                icon={Percent}
+              />
+            </div>
+
+            <section className="mt-5 rounded-2xl border border-border bg-card p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold">Income by hour</h2>
+                  <p className="text-xs text-muted-foreground">Live trend during opening hours</p>
+                </div>
+                <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                  Today
+                </span>
+              </div>
+              <div className="mt-4 flex h-24 items-end justify-between gap-2">
+                {HOURLY_INCOME.map((slot) => {
+                  const heightPercent = maxHourly > 0 ? (slot.amount / maxHourly) * 100 : 0;
+                  const isPeak = slot.hour === businessMetrics.peakHourLabel.replace(":00", "");
+                  return (
+                    <div key={slot.hour} className="flex w-full flex-col items-center gap-1">
+                      <div className="relative flex h-full w-full items-end">
+                        <div
+                          className={`w-full rounded-t-md transition-all ${
+                            isPeak ? "bg-primary" : "bg-primary/30"
+                          }`}
+                          style={{ height: `${heightPercent}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">{slot.hour}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="mt-3 flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-accent text-primary">
+                <Trophy className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Top product today</p>
+                <p className="text-sm font-semibold">{TOP_PRODUCT.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {TOP_PRODUCT.units} sold · {formatCurrency(TOP_PRODUCT.revenue)}
+                </p>
+              </div>
+            </section>
+
+            <section
+              className={`mt-3 rounded-2xl border p-4 text-xs ${
+                businessMetrics.goalReached
+                  ? "border-primary/30 bg-accent text-foreground"
+                  : "border-border bg-card text-foreground"
+              }`}
+            >
+              <p className="font-semibold">
+                {businessMetrics.goalReached
+                  ? "You're on track."
+                  : `Need ${formatCurrency(businessMetrics.incomeGap)} to hit today's goal`}
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                Tip: launch a flash offer during your next peak window to push more redemptions.
+              </p>
+            </section>
+          </main>
+        </div>
+      </MobileShell>
+    );
+  }
 
   return (
     <MobileShell>
@@ -361,5 +544,30 @@ function HomePage() {
       </AnimatePresence>
       </div>
     </MobileShell>
+  );
+}
+
+function BusinessKpi({
+  title,
+  value,
+  helper,
+  icon: Icon,
+}: {
+  title: string;
+  value: string;
+  helper: string;
+  icon: ComponentType<{ className?: string }>;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          {title}
+        </span>
+        <Icon className="h-3.5 w-3.5 text-primary" />
+      </div>
+      <p className="mt-2 text-lg font-bold tabular-nums leading-none">{value}</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">{helper}</p>
+    </div>
   );
 }
