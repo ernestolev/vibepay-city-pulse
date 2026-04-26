@@ -1,4 +1,6 @@
 import type { LocalMerchant } from "./merchantData";
+import type { VibeKey } from "./vibe";
+import { getTimeBucket } from "./vibeEngine";
 
 type WeatherVibe = "sunny" | "rainy" | "cloudy";
 export type PulseContext =
@@ -146,6 +148,183 @@ export async function getCityVibe(city: string, pulseContext?: PulseContext): Pr
   } catch {
     return FALLBACK_VIBE;
   }
+}
+
+export interface CityPulseResult {
+  pulse: CityVibe;
+  /** False when API key is missing or the request failed — owner UI should not hard-block offers. */
+  usedTavilyApi: boolean;
+}
+
+/**
+ * Tavily search shaped by the **simulator** (vibe + time + Mia origin), so changing
+ * "Simulate City Pulse" refetches and can gate owner flash suggestions.
+ */
+export async function getCityPulseForSimulator(params: {
+  city?: string;
+  lat?: number;
+  lng?: number;
+  vibe: VibeKey;
+  simulatedTime: string | null;
+}): Promise<CityPulseResult> {
+  const city = params.city ?? "Stuttgart, Germany";
+  const apiKey = import.meta.env.VITE_TAVILY_API_KEY;
+
+  if (!apiKey) {
+    return {
+      pulse: {
+        ...FALLBACK_VIBE,
+        recommendation:
+          "Sin VITE_TAVILY_API_KEY no hay pulso web: la sugerencia solo usa Payone + inventario.",
+      },
+      usedTavilyApi: false,
+    };
+  }
+
+  const bucket = getTimeBucket(params.simulatedTime);
+  const loc =
+    params.lat != null && params.lng != null
+      ? ` near ${params.lat.toFixed(4)}, ${params.lng.toFixed(4)}`
+      : "";
+
+  /** `event` = modo “tiempo real”: no forzar clima en la query; dejar que el texto refleje Tavily. */
+  const isLiveWeatherMode = params.vibe === "event";
+
+  const weatherPhrase = isLiveWeatherMode
+    ? "Current real-time weather forecast and conditions"
+    : params.vibe === "rainy"
+      ? "Rainy wet weather"
+      : params.vibe === "sunny"
+        ? "Bright sunny clear weather"
+        : params.vibe === "nighttime"
+          ? "Late evening night"
+          : "Current weather";
+
+  const timePhrase =
+    bucket === "morning"
+      ? "in the morning"
+      : bucket === "afternoon"
+        ? "afternoon"
+        : bucket === "evening"
+          ? "early evening"
+          : bucket === "night"
+            ? "at night"
+            : "right now";
+
+  const query = isLiveWeatherMode
+    ? `${weatherPhrase} ${timePhrase} in ${city} Old Town${loc} what is open for visitors cafés bakeries`
+    : `${weatherPhrase} ${timePhrase} ${city} Old Town${loc} independent cafés bakeries local shops foot traffic`;
+
+  try {
+    const response = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        query,
+        search_depth: "advanced",
+        max_results: 5,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Tavily request failed with status ${response.status}`);
+    }
+
+    const data = (await response.json()) as TavilyResponse;
+    const results = data.results ?? [];
+    const allText = results.map((r) => `${r.title ?? ""} ${r.content ?? ""}`).join(" ");
+    const weather = inferWeather(allText);
+    const topEvent = pickTopEvent(results);
+    const recommendation = isLiveWeatherMode
+      ? `Pulso tiempo real (${timePhrase}): clima inferido ${weather} — basado en búsqueda Tavily + tu hora simulada.`
+      : weather === "rainy"
+        ? "Tavily pulse: rain — warm indoor venues and hot drinks fit the moment."
+        : weather === "sunny"
+          ? "Tavily pulse: sun — terraces, gelato, outdoor foot traffic likely."
+          : "Tavily pulse: mixed / cloudy — steady local cafés and retail.";
+
+    return {
+      pulse: {
+        weather,
+        topEvent,
+        recommendation,
+        city,
+        temperatureC: weather === "cloudy" ? 11 : weather === "rainy" ? 10 : 18,
+        cafeName: pickCafeName(results),
+      },
+      usedTavilyApi: true,
+    };
+  } catch {
+    return {
+      pulse: {
+        ...FALLBACK_VIBE,
+        recommendation: "Tavily no respondió; comprueba red o API key.",
+      },
+      usedTavilyApi: false,
+    };
+  }
+}
+
+/**
+ * When Tavily is active, block owner flash promos if the **real search pulse**
+ * contradicts the simulated vibe (or time for “late hours”).
+ */
+export function simulatorAlignedWithTavily(
+  vibe: VibeKey,
+  pulse: CityVibe,
+  usedTavilyApi: boolean,
+  simulatedTime: string | null,
+): { ok: boolean; messageKey?: string } {
+  if (!usedTavilyApi) {
+    return { ok: true };
+  }
+
+  /** Modo tiempo real: Tavily manda; no comparar con un clima “forzado”. */
+  if (vibe === "event") {
+    return { ok: true };
+  }
+
+  const bucket = getTimeBucket(simulatedTime);
+
+  if (vibe === "nighttime") {
+    if (bucket !== "evening" && bucket !== "night") {
+      return {
+        ok: false,
+        messageKey: "pulse.late_hours_time",
+      };
+    }
+  }
+
+  if (vibe === "rainy" && pulse.weather === "sunny") {
+    return {
+      ok: false,
+      messageKey: "pulse.rain_vs_sunny_tavily",
+    };
+  }
+
+  if (vibe === "sunny" && pulse.weather === "rainy") {
+    return {
+      ok: false,
+      messageKey: "pulse.sunny_vs_rain_tavily",
+    };
+  }
+
+  return { ok: true };
+}
+
+/** Para inventario / copy: en modo `event` usar el clima que Tavily infirió, no el botón “festival”. */
+export function resolveInventoryVibe(
+  simulatorVibe: VibeKey,
+  livePulse: CityVibe | null | undefined,
+): VibeKey {
+  if (simulatorVibe !== "event") return simulatorVibe;
+  if (!livePulse) return "sunny";
+  if (livePulse.weather === "sunny") return "sunny";
+  if (livePulse.weather === "rainy") return "rainy";
+  return "nighttime";
 }
 
 export interface MerchantContextSnippet {

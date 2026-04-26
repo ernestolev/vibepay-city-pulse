@@ -9,13 +9,20 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RedeemRouteImport } from './routes/redeem'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as OffersRouteImport } from './routes/offers'
 import { Route as MerchantRouteImport } from './routes/merchant'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PaySessionIdRouteImport } from './routes/pay.$sessionId'
 import { Route as OfferOfferIdRouteImport } from './routes/offer.$offerId'
 
+const RedeemRoute = RedeemRouteImport.update({
+  id: '/redeem',
+  path: '/redeem',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -41,6 +48,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PaySessionIdRoute = PaySessionIdRouteImport.update({
+  id: '/pay/$sessionId',
+  path: '/pay/$sessionId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OfferOfferIdRoute = OfferOfferIdRouteImport.update({
   id: '/offer/$offerId',
   path: '/offer/$offerId',
@@ -53,7 +65,9 @@ export interface FileRoutesByFullPath {
   '/merchant': typeof MerchantRoute
   '/offers': typeof OffersRoute
   '/profile': typeof ProfileRoute
+  '/redeem': typeof RedeemRoute
   '/offer/$offerId': typeof OfferOfferIdRoute
+  '/pay/$sessionId': typeof PaySessionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -61,7 +75,9 @@ export interface FileRoutesByTo {
   '/merchant': typeof MerchantRoute
   '/offers': typeof OffersRoute
   '/profile': typeof ProfileRoute
+  '/redeem': typeof RedeemRoute
   '/offer/$offerId': typeof OfferOfferIdRoute
+  '/pay/$sessionId': typeof PaySessionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -70,7 +86,9 @@ export interface FileRoutesById {
   '/merchant': typeof MerchantRoute
   '/offers': typeof OffersRoute
   '/profile': typeof ProfileRoute
+  '/redeem': typeof RedeemRoute
   '/offer/$offerId': typeof OfferOfferIdRoute
+  '/pay/$sessionId': typeof PaySessionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -80,7 +98,9 @@ export interface FileRouteTypes {
     | '/merchant'
     | '/offers'
     | '/profile'
+    | '/redeem'
     | '/offer/$offerId'
+    | '/pay/$sessionId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -88,7 +108,9 @@ export interface FileRouteTypes {
     | '/merchant'
     | '/offers'
     | '/profile'
+    | '/redeem'
     | '/offer/$offerId'
+    | '/pay/$sessionId'
   id:
     | '__root__'
     | '/'
@@ -96,7 +118,9 @@ export interface FileRouteTypes {
     | '/merchant'
     | '/offers'
     | '/profile'
+    | '/redeem'
     | '/offer/$offerId'
+    | '/pay/$sessionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -105,11 +129,20 @@ export interface RootRouteChildren {
   MerchantRoute: typeof MerchantRoute
   OffersRoute: typeof OffersRoute
   ProfileRoute: typeof ProfileRoute
+  RedeemRoute: typeof RedeemRoute
   OfferOfferIdRoute: typeof OfferOfferIdRoute
+  PaySessionIdRoute: typeof PaySessionIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/redeem': {
+      id: '/redeem'
+      path: '/redeem'
+      fullPath: '/redeem'
+      preLoaderRoute: typeof RedeemRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
@@ -145,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pay/$sessionId': {
+      id: '/pay/$sessionId'
+      path: '/pay/$sessionId'
+      fullPath: '/pay/$sessionId'
+      preLoaderRoute: typeof PaySessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/offer/$offerId': {
       id: '/offer/$offerId'
       path: '/offer/$offerId'
@@ -161,7 +201,9 @@ const rootRouteChildren: RootRouteChildren = {
   MerchantRoute: MerchantRoute,
   OffersRoute: OffersRoute,
   ProfileRoute: ProfileRoute,
+  RedeemRoute: RedeemRoute,
   OfferOfferIdRoute: OfferOfferIdRoute,
+  PaySessionIdRoute: PaySessionIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

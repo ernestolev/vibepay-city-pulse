@@ -86,6 +86,7 @@ const ACTIVATION_META: Record<ActivationState, { label: string; tone: string; ic
 function MerchantPage() {
   const {
     merchants,
+    updateMerchant,
     updateRule,
     toggleRule,
     setOccupancy,
@@ -255,6 +256,18 @@ function MerchantPage() {
                 </p>
               </>
             ) : null}
+          </section>
+
+          <section className="mt-5 rounded-3xl border border-border bg-surface p-4">
+            <p className="text-[11px] font-semibold text-foreground">Ofertas flash para clientes</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+              Si Payone marca poco tráfico, VibePay puede sugerirte un descuento a partir de tu inventario
+              (JSON). Revísalo y actívalo en{" "}
+              <Link to="/offers" className="font-semibold text-foreground underline-offset-2 hover:underline">
+                Ofertas
+              </Link>
+              .
+            </p>
           </section>
 
           <section className="mt-5 rounded-3xl border border-border bg-surface p-4">

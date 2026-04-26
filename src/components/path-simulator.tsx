@@ -27,10 +27,14 @@ import {
   type VibeMatch,
 } from "@/lib/merchantData";
 import { useMerchants } from "@/lib/merchant-rules-context";
-import { searchMerchantContext } from "@/lib/tavilyService";
 import { getTimeBucket } from "@/lib/vibeEngine";
 import { buildOfferContext, evaluateOffer } from "@/lib/offerEngine";
+import { buildProximityPushCopy } from "@/lib/coPilotOffer";
+import { MIA_VIBEPAY_PREFERENCE_TAGS } from "@/lib/miaConsumerProfile";
+import type { MiaPulseWeather } from "@/lib/i18n/types";
 import { getWalkingRoute, isGoogleMapsConfigured } from "@/lib/googleMapsService";
+import { DEMO_MERCHANT_ID } from "@/lib/merchant-demo-profile";
+import { useI18n } from "@/lib/i18n/context";
 import { GoogleMapView } from "./google-map-view";
 
 const MAP_WIDTH = 320;
@@ -57,12 +61,19 @@ const STREETS: Array<{ d: string }> = [
 const WALK_SPEED_MPS = 2;
 const WALK_SPEED_KMH = +(WALK_SPEED_MPS * 3.6).toFixed(1);
 const WALK_TICK_MS = 60;
-const PROXIMITY_RADIUS_M = 70;
+/** Default radius when Mia’s path passes near a merchant pin (Google walking routes often arc around blocks). */
+const PROXIMITY_RADIUS_M = 130;
+/** Wider catchment for the DSV / demo affiliate pin so jury walks reliably trigger a push. */
+const AFFILIATE_PROXIMITY_RADIUS_M = 220;
 
 type RouteSource = "google" | "fallback" | null;
 
 function bucketToVibe(bucket: ReturnType<typeof getTimeBucket>): VibeMatch | null {
   if (bucket === "morning" || bucket === "evening" || bucket === "night") return bucket;
+  /** Lunch window: seed merchants like the demo bakery tag `cold` / afternoon treats. */
+  if (bucket === "afternoon") return "cold";
+  /** No simulated clock: still allow `cold`-tagged merchants (e.g. Bäckerei Treiber) to match. */
+  if (bucket === "unspecified") return "cold";
   return null;
 }
 
@@ -79,6 +90,13 @@ function formatPushTime(simulatedTime: string | null): string {
   if (simulatedTime) return simulatedTime;
   const d = new Date();
   return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+}
+
+function vibeKeyToPulse(v: string): MiaPulseWeather | undefined {
+  if (v === "sunny") return "sunny";
+  if (v === "rainy") return "rainy";
+  if (v === "nighttime") return "nighttime";
+  return undefined;
 }
 
 function buildPolylineD(points: GeoPoint[]): string {
@@ -116,9 +134,11 @@ export function PathSimulator() {
     markMerchantNotified,
     clearNotifiedMerchants,
     resetWalkSession,
+    commitStandingLocation,
     simulatedTime,
   } = useAppContext();
   const { vibe } = useVibe();
+  const { t, locale } = useI18n();
   const merchants = useMerchants();
 
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -249,6 +269,10 @@ export function PathSimulator() {
   )?.id ?? null;
 
   const elapsedRef = useRef(0);
+  const miaPositionRef = useRef(miaPosition);
+  miaPositionRef.current = miaPosition;
+  /** DEV: one warning per walk if Treiber is in range but Payone traffic gate blocks the push. */
+  const affiliateLowTrafficDevWarnedRef = useRef(false);
 
   const handleStart = () => {
     if (!destination || pathPoints.length < 2 || isLoadingRoute) return;
@@ -259,10 +283,16 @@ export function PathSimulator() {
       elapsedRef.current = 0;
       clearNotifiedMerchants();
     }
+    affiliateLowTrafficDevWarnedRef.current = false;
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("vibepay-simulated-walk", { detail: { phase: "start" } }));
+    }
     setIsWalking(true);
   };
 
-  const handlePause = () => setIsWalking(false);
+  const handlePause = () => {
+    commitStandingLocation(miaPositionRef.current);
+  };
 
   const handleReset = () => {
     elapsedRef.current = 0;
@@ -276,6 +306,7 @@ export function PathSimulator() {
   useEffect(() => {
     if (!isWalking) return;
     if (pathPoints.length < 2) {
+      if (destination) return;
       setIsWalking(false);
       return;
     }
@@ -312,9 +343,10 @@ export function PathSimulator() {
       const segT = segLen > 0 ? (targetDist - cumulative[segIdx]) / segLen : 1;
 
       const next = interpolate(segStart, segEnd, segT);
+      miaPositionRef.current = next;
       setMiaPosition(next);
 
-      const nearby = findNearbyMatchingMerchants(
+      let nearby = findNearbyMatchingMerchants(
         merchants,
         next,
         PROXIMITY_RADIUS_M,
@@ -322,72 +354,110 @@ export function PathSimulator() {
         notifiedMerchantIds,
       );
 
+      const affiliate = merchants.find((m) => m.id === DEMO_MERCHANT_ID);
+      if (
+        affiliate &&
+        !notifiedMerchantIds.has(DEMO_MERCHANT_ID) &&
+        distanceMeters(next, affiliate.position) <= AFFILIATE_PROXIMITY_RADIUS_M
+      ) {
+        if (!nearby.some((m) => m.id === DEMO_MERCHANT_ID)) {
+          nearby = [...nearby, affiliate];
+        }
+      }
+
+      nearby.sort(
+        (a, b) => distanceMeters(next, a.position) - distanceMeters(next, b.position),
+      );
+
       if (nearby.length > 0) {
-        // Pick the FIRST nearby merchant that is currently in low_traffic mode.
+        // Pick the closest nearby merchant that is currently in low_traffic mode.
         // Merchants with target reached or steady traffic are silently skipped:
         // VibePay never disturbs Mia for shops that don't need a boost.
-        const offerCtx = buildOfferContext({
-          weatherVibe: vibe === "rainy" ? "rainy" : vibe === "sunny" ? "sunny" : "cloudy",
-          isCold: vibe === "rainy" || vibe === "nighttime",
-          simulatedTime,
-          occupancy: nearby[0].occupancy,
-        });
+        const weatherVibe = vibe === "rainy" ? "rainy" : vibe === "sunny" ? "sunny" : "cloudy";
+        const isCold = vibe === "rainy" || vibe === "nighttime";
 
-        const activated = nearby
-          .map((m) => ({ merchant: m, evaluated: evaluateOffer(m, offerCtx) }))
-          .find((x) => x.evaluated.activationState === "low_traffic");
+        const evaluatedNearby = nearby.map((m) => ({
+          merchant: m,
+          evaluated: evaluateOffer(
+            m,
+            buildOfferContext({
+              weatherVibe,
+              isCold,
+              simulatedTime,
+              occupancy: m.occupancy,
+            }),
+          ),
+        }));
+
+        const activated = evaluatedNearby.find((x) => x.evaluated.activationState === "low_traffic");
+
+        if (import.meta.env.DEV && !affiliateLowTrafficDevWarnedRef.current) {
+          const affEv = evaluatedNearby.find((x) => x.merchant.id === DEMO_MERCHANT_ID);
+          if (affEv && affEv.evaluated.activationState !== "low_traffic") {
+            affiliateLowTrafficDevWarnedRef.current = true;
+            console.warn(
+              "[VibePay] Bäckerei Treiber está en rango pero no hay push:",
+              affEv.evaluated.activationState,
+              "—",
+              affEv.evaluated.transactionSummary,
+              "Baja «Transacciones hoy» en /merchant o en merchants en Supabase.",
+            );
+          }
+        }
 
         if (activated) {
           const { merchant, evaluated } = activated;
           markMerchantNotified(merchant.id);
           setSimulatedMerchant(merchant);
 
+          const copy = buildProximityPushCopy({
+            merchant,
+            evaluated,
+            timeBucket: getTimeBucket(simulatedTime ?? null),
+            pulseWeather: vibeKeyToPulse(vibe),
+            locale,
+            miaPreferenceTags: MIA_VIBEPAY_PREFERENCE_TAGS,
+          });
+          const stableClientId = `proximity-${merchant.id}`;
+
           showPushNotification({
-            id: `${merchant.id}-${Date.now()}`,
-            title: `${merchant.name} — ${evaluated.headline}`,
-            subtitle: `${evaluated.discount} · ${merchant.signature}`,
-            body: evaluated.message,
+            id: stableClientId,
+            title: copy.title,
+            subtitle: copy.subtitle,
+            body: copy.body,
             merchant,
             timestamp: formatPushTime(simulatedTime),
           });
-
-          void searchMerchantContext(merchant).then((snippet) => {
-            if (snippet.source !== "tavily") return;
-            showPushNotification({
-              id: `${merchant.id}-tavily-${Date.now()}`,
-              title: `${merchant.name} — verified live`,
-              subtitle: snippet.liveSnippet,
-              merchant,
-              timestamp: formatPushTime(simulatedTime),
-            });
-          });
-        } else {
-          // Mark them all notified to avoid re-checking the same shops every tick
-          // even though no push fired (they didn't need traffic right now).
-          nearby.forEach((m) => markMerchantNotified(m.id));
         }
+        /** If no push (e.g. traffic still "normal"), do NOT mark merchants notified — otherwise
+         *  lowering "Transactions today" in the simulator never retries. */
       }
 
       if (targetDist >= totalDist) {
         window.clearInterval(interval);
-        setIsWalking(false);
+        commitStandingLocation(next);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("vibepay-simulated-walk", { detail: { phase: "end" } }));
+        }
       }
     }, WALK_TICK_MS);
 
     return () => window.clearInterval(interval);
   }, [
     isWalking,
+    destination,
     pathPoints,
     matchingVibes,
     notifiedMerchantIds,
     markMerchantNotified,
     setMiaPosition,
-    setIsWalking,
+    commitStandingLocation,
     setSimulatedMerchant,
     showPushNotification,
     simulatedTime,
     merchants,
     vibe,
+    locale,
   ]);
 
   const miaXY = projectToSvg(miaPosition, MAP_WIDTH, MAP_HEIGHT);
@@ -406,6 +476,9 @@ export function PathSimulator() {
             {mapClickMode === "origin"
               ? "Tap the map or a pin to drop Mia there"
               : "Tap a pin or the map to set destination"}
+          </p>
+          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/90">
+            {t("simulator.pathProximityHint")}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -499,6 +572,8 @@ export function PathSimulator() {
             matchingVibes={matchingVibes}
             isWalking={isWalking}
             routeSource={routeSource}
+            affiliatedMerchantId={DEMO_MERCHANT_ID}
+            affiliatedLabel={t("map.affiliatePin")}
             onMerchantClick={pickMerchantAsDestination}
             onMapClick={handleMapPick}
             onLoadError={(err) => {
@@ -588,6 +663,8 @@ export function PathSimulator() {
             const xy = projectToSvg(m.position, MAP_WIDTH, MAP_HEIGHT);
             const matches = m.vibesMatch.some((v) => matchingVibes.includes(v));
             const isHover = hoveredId === m.id;
+            const isAffiliate = m.id === DEMO_MERCHANT_ID;
+            const pinR = isAffiliate ? (isHover ? 6 : 5) : isHover ? 5 : 4;
             return (
               <g
                 key={m.id}
@@ -600,15 +677,41 @@ export function PathSimulator() {
                 onMouseLeave={() => setHoveredId(null)}
                 className="cursor-pointer"
               >
+                {isAffiliate ? (
+                  <circle
+                    r={14}
+                    fill="none"
+                    stroke="#D97706"
+                    strokeWidth={2}
+                    strokeDasharray="4 3"
+                    opacity={0.95}
+                  />
+                ) : null}
                 {matches ? (
-                  <circle r={9} fill={CATEGORY_COLOR[m.category]} fillOpacity="0.18" />
+                  <circle
+                    r={isAffiliate ? 11 : 9}
+                    fill={CATEGORY_COLOR[m.category]}
+                    fillOpacity="0.18"
+                  />
                 ) : null}
                 <circle
-                  r={isHover ? 5 : 4}
+                  r={pinR}
                   fill={CATEGORY_COLOR[m.category]}
-                  stroke="#FFFFFF"
-                  strokeWidth={1.5}
+                  stroke={isAffiliate ? "#D97706" : "#FFFFFF"}
+                  strokeWidth={isAffiliate ? 2.25 : 1.5}
                 />
+                {isAffiliate ? (
+                  <text
+                    y={-18}
+                    textAnchor="middle"
+                    fontSize="7"
+                    fontWeight="700"
+                    fill="#B45309"
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {t("map.affiliatePin")}
+                  </text>
+                ) : null}
                 {isHover ? (
                   <g pointerEvents="none">
                     <rect

@@ -35,6 +35,9 @@ interface GoogleMapViewProps {
   matchingVibes: VibeMatch[];
   isWalking: boolean;
   routeSource: "google" | "fallback" | null;
+  /** Demo partner merchant (e.g. Bäckerei Treiber) — highlighted for walk / push notification demos. */
+  affiliatedMerchantId?: string | null;
+  affiliatedLabel?: string;
   onMerchantClick: (merchant: LocalMerchant) => void;
   onMapClick: (point: GeoPoint) => void;
   onLoadError: (err: Error) => void;
@@ -48,6 +51,8 @@ export function GoogleMapView({
   matchingVibes,
   isWalking,
   routeSource,
+  affiliatedMerchantId = null,
+  affiliatedLabel = "",
   onMerchantClick,
   onMapClick,
   onLoadError,
@@ -55,6 +60,8 @@ export function GoogleMapView({
   const merchants = useMerchants();
   const merchantsRef = useRef<LocalMerchant[]>(merchants);
   merchantsRef.current = merchants;
+  const affiliatedIdRef = useRef(affiliatedMerchantId);
+  affiliatedIdRef.current = affiliatedMerchantId;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const googleRef = useRef<any>(null);
@@ -66,6 +73,7 @@ export function GoogleMapView({
   const merchantMarkersRef = useRef<Map<string, any>>(new Map());
   const routePolylineRef = useRef<any>(null);
   const routeOutlineRef = useRef<any>(null);
+  const affiliateLabelMarkerRef = useRef<any>(null);
 
   const [isReady, setIsReady] = useState(false);
 
@@ -139,19 +147,21 @@ export function GoogleMapView({
 
         merchantsRef.current.forEach((m) => {
           const matches = m.vibesMatch.some((v) => matchingVibes.includes(v));
+          const isAffiliate =
+            affiliatedIdRef.current != null && m.id === affiliatedIdRef.current;
           const marker = new google.maps.Marker({
             position: m.position,
             map,
             icon: {
               path: google.maps.SymbolPath.CIRCLE,
-              scale: matches ? 7 : 5,
+              scale: isAffiliate ? (matches ? 10 : 8) : matches ? 7 : 5,
               fillColor: CATEGORY_COLOR[m.category],
-              fillOpacity: matches ? 1 : 0.55,
-              strokeColor: "#FFFFFF",
-              strokeWeight: 1.5,
+              fillOpacity: matches || isAffiliate ? 1 : 0.55,
+              strokeColor: isAffiliate ? "#D97706" : "#FFFFFF",
+              strokeWeight: isAffiliate ? 3 : 1.5,
             },
             title: `${m.name} · ${m.category}`,
-            zIndex: matches ? 600 : 400,
+            zIndex: isAffiliate ? 900 : matches ? 600 : 400,
           });
           marker.addListener("click", () => onMerchantClick(m));
           merchantMarkersRef.current.set(m.id, marker);
@@ -179,6 +189,8 @@ export function GoogleMapView({
       destMarkerRef.current?.setMap(null);
       routePolylineRef.current?.setMap(null);
       routeOutlineRef.current?.setMap(null);
+      affiliateLabelMarkerRef.current?.setMap(null);
+      affiliateLabelMarkerRef.current = null;
       mapRef.current = null;
     };
   }, []);
@@ -285,17 +297,63 @@ export function GoogleMapView({
       const marker = merchantMarkersRef.current.get(m.id);
       if (!marker) return;
       const matches = m.vibesMatch.some((v) => matchingVibes.includes(v));
+      const isAffiliate = affiliatedMerchantId != null && m.id === affiliatedMerchantId;
       marker.setIcon({
         path: google.maps.SymbolPath.CIRCLE,
-        scale: matches ? 7 : 5,
+        scale: isAffiliate ? (matches ? 10 : 8) : matches ? 7 : 5,
         fillColor: CATEGORY_COLOR[m.category],
-        fillOpacity: matches ? 1 : 0.55,
-        strokeColor: "#FFFFFF",
-        strokeWeight: 1.5,
+        fillOpacity: matches || isAffiliate ? 1 : 0.55,
+        strokeColor: isAffiliate ? "#D97706" : "#FFFFFF",
+        strokeWeight: isAffiliate ? 3 : 1.5,
       });
-      marker.setZIndex(matches ? 600 : 400);
+      marker.setZIndex(isAffiliate ? 900 : matches ? 600 : 400);
     });
-  }, [matchingVibes, isReady, merchants]);
+  }, [matchingVibes, isReady, merchants, affiliatedMerchantId]);
+
+  useEffect(() => {
+    if (!isReady || !googleRef.current || !mapRef.current) return;
+    const google = googleRef.current;
+    const map = mapRef.current;
+
+    if (!affiliatedMerchantId || !affiliatedLabel) {
+      affiliateLabelMarkerRef.current?.setMap(null);
+      affiliateLabelMarkerRef.current = null;
+      return;
+    }
+
+    const aff = merchants.find((m) => m.id === affiliatedMerchantId);
+    if (!aff) {
+      affiliateLabelMarkerRef.current?.setMap(null);
+      affiliateLabelMarkerRef.current = null;
+      return;
+    }
+
+    if (!affiliateLabelMarkerRef.current) {
+      affiliateLabelMarkerRef.current = new google.maps.Marker({
+        position: aff.position,
+        map,
+        icon: {
+          path: "M 0,0",
+          scale: 0,
+        },
+        label: {
+          text: affiliatedLabel,
+          color: "#B45309",
+          fontWeight: "700",
+          fontSize: "10px",
+        },
+        zIndex: 902,
+      });
+    } else {
+      affiliateLabelMarkerRef.current.setPosition(aff.position);
+      affiliateLabelMarkerRef.current.setLabel({
+        text: affiliatedLabel,
+        color: "#B45309",
+        fontWeight: "700",
+        fontSize: "10px",
+      });
+    }
+  }, [isReady, affiliatedMerchantId, affiliatedLabel, merchants]);
 
   return <div ref={containerRef} className="h-[260px] w-full" aria-label="Stuttgart Old Town live map" />;
 }

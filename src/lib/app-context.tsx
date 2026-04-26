@@ -7,9 +7,27 @@ import {
   type ReactNode,
 } from "react";
 import { MIA_HOME, type GeoPoint, type LocalMerchant } from "./merchantData";
+import { persistPushNotification } from "./pushNotificationsSupabase";
 
-/** iOS-style boot: lock → home grid → in-app (wallet). */
-export type DeviceBootStage = "lock" | "springboard" | "inApp";
+const WALLET_SESSION_KEY = "vibepay_wallet_unlocked";
+const DEVICE_BOOT_KEY = "vibepay_device_boot";
+const APP_PERSONA_KEY = "vibepay_app_persona";
+
+export type AppPersona = "mia" | "merchant";
+
+function getInitialAppPersona(): AppPersona {
+  if (typeof window === "undefined") return "mia";
+  try {
+    const v = sessionStorage.getItem(APP_PERSONA_KEY);
+    if (v === "merchant") return "merchant";
+  } catch {
+    /* ignore */
+  }
+  return "mia";
+}
+
+/** iOS-style boot: lock → home grid → PIN → in-app (wallet). */
+export type DeviceBootStage = "lock" | "springboard" | "pin" | "inApp";
 
 function getInitialDeviceBootStage(): DeviceBootStage {
   if (typeof window === "undefined") return "inApp";
@@ -17,7 +35,10 @@ function getInitialDeviceBootStage(): DeviceBootStage {
     if (new URLSearchParams(window.location.search).get("nodevice") === "1") {
       return "inApp";
     }
-    if (sessionStorage.getItem("vibepay_device_boot") === "1") {
+    if (sessionStorage.getItem(WALLET_SESSION_KEY) === "1") {
+      return "inApp";
+    }
+    if (sessionStorage.getItem(DEVICE_BOOT_KEY) === "1") {
       return "inApp";
     }
   } catch {
@@ -33,6 +54,13 @@ export interface PushNotification {
   body?: string;
   merchant: LocalMerchant;
   timestamp: string;
+}
+
+/** Geo slice persisted in `simulator_state` (Supabase + localStorage). Does not clear push / notified. */
+export interface SimulatorPersistenceGeoSnapshot {
+  miaOrigin: GeoPoint;
+  miaDestination: GeoPoint | null;
+  isWalking: boolean;
 }
 
 export interface AppState {
@@ -71,12 +99,27 @@ export interface AppState {
   markMerchantNotified: (id: string) => void;
   clearNotifiedMerchants: () => void;
   resetWalkSession: () => void;
+  /**
+   * After a simulated walk ends or pauses: set standing point here (updates `miaOrigin` + `miaPosition`,
+   * clears route). Does not wipe push / Co-Pilot focus. Persisted by SimulatorStateBridge like `miaOrigin`.
+   */
+  commitStandingLocation: (p: GeoPoint) => void;
+  /** DB / realtime / localStorage: apply origin, route destination, walking without wiping offers or push. */
+  applySimulatorPersistenceSnapshot: (p: SimulatorPersistenceGeoSnapshot) => void;
 
   deviceBootStage: DeviceBootStage;
   setDeviceBootStage: (s: DeviceBootStage) => void;
   enterAppFromBoot: () => void;
+  /** Bumps on each in-app open from the device flow so the shell can play an entrance. */
+  appLaunchNonce: number;
+  /** Clears wallet + device flags so the next abrir desde springboard pide PIN de nuevo. */
+  clearWalletSession: () => void;
   /** Clears session flag and returns to the lock screen (jury / demo again). */
   replayDeviceBoot: () => void;
+
+  /** Consumer (Mia) vs. demo local store owner (merchant) — same shell, different copy & flows. */
+  appPersona: AppPersona;
+  setAppPersona: (p: AppPersona) => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -85,6 +128,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [simulatedTime, setSimulatedTime] = useState<string | null>(null);
   const [deviceBootStage, setDeviceBootStage] = useState<DeviceBootStage>(getInitialDeviceBootStage);
+  const [appLaunchNonce, setAppLaunchNonce] = useState(0);
+  const [appPersona, setAppPersonaState] = useState<AppPersona>(getInitialAppPersona);
+
+  const setAppPersona = useCallback((p: AppPersona) => {
+    setAppPersonaState(p);
+    try {
+      sessionStorage.setItem(APP_PERSONA_KEY, p);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const [miaOrigin, setMiaOriginState] = useState<GeoPoint>(MIA_HOME);
   const [miaPosition, setMiaPosition] = useState<GeoPoint>(MIA_HOME);
@@ -106,6 +160,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const showPushNotification = useCallback((n: PushNotification) => {
     setPushNotification(n);
+    void persistPushNotification({
+      id: n.id,
+      title: n.title,
+      subtitle: n.subtitle,
+      body: n.body,
+      merchantId: n.merchant.id,
+      merchantName: n.merchant.name,
+    });
   }, []);
 
   const dismissPushNotification = useCallback(() => {
@@ -135,18 +197,51 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setNotifiedMerchantIds(new Set());
   }, [miaOrigin]);
 
-  const enterAppFromBoot = useCallback(() => {
+  const commitStandingLocation = useCallback((p: GeoPoint) => {
+    setMiaOriginState(p);
+    setMiaPosition(p);
+    setIsWalking(false);
+    setDestination(null);
+  }, []);
+
+  const applySimulatorPersistenceSnapshot = useCallback((p: SimulatorPersistenceGeoSnapshot) => {
+    setMiaOriginState(p.miaOrigin);
+    setDestination(p.miaDestination);
+    setIsWalking(p.isWalking);
+    /**
+     * While `isWalking`, `miaPosition` is advanced by PathSimulator — do not snap to origin here.
+     * Realtime echoes of our own upsert were resetting Mia to the route start every ~450ms, so she
+     * never stayed within proximity of merchant pins and push never fired.
+     */
+    if (!p.isWalking) {
+      setMiaPosition(p.miaOrigin);
+    }
+  }, []);
+
+  const clearWalletSession = useCallback(() => {
     try {
-      sessionStorage.setItem("vibepay_device_boot", "1");
+      sessionStorage.removeItem(WALLET_SESSION_KEY);
+      sessionStorage.removeItem(DEVICE_BOOT_KEY);
     } catch {
       /* ignore */
     }
+  }, []);
+
+  const enterAppFromBoot = useCallback(() => {
+    try {
+      sessionStorage.setItem(DEVICE_BOOT_KEY, "1");
+      sessionStorage.setItem(WALLET_SESSION_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setAppLaunchNonce((n) => n + 1);
     setDeviceBootStage("inApp");
   }, []);
 
   const replayDeviceBoot = useCallback(() => {
     try {
-      sessionStorage.removeItem("vibepay_device_boot");
+      sessionStorage.removeItem(DEVICE_BOOT_KEY);
+      sessionStorage.removeItem(WALLET_SESSION_KEY);
     } catch {
       /* ignore */
     }
@@ -176,10 +271,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markMerchantNotified,
       clearNotifiedMerchants,
       resetWalkSession,
+      commitStandingLocation,
+      applySimulatorPersistenceSnapshot,
       deviceBootStage,
       setDeviceBootStage,
       enterAppFromBoot,
+      appLaunchNonce,
+      clearWalletSession,
       replayDeviceBoot,
+      appPersona,
+      setAppPersona,
     }),
     [
       isPresentationMode,
@@ -197,9 +298,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markMerchantNotified,
       clearNotifiedMerchants,
       resetWalkSession,
+      commitStandingLocation,
+      applySimulatorPersistenceSnapshot,
       deviceBootStage,
+      appLaunchNonce,
       enterAppFromBoot,
+      clearWalletSession,
       replayDeviceBoot,
+      appPersona,
+      setAppPersona,
     ],
   );
 

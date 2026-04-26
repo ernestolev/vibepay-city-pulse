@@ -10,6 +10,7 @@ import {
   type SimulatorStatePayload,
   type SimulatorStateRow,
 } from "@/lib/simulatorStateSync";
+import { upsertConsumerLocation } from "@/lib/consumerProfileSupabase";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { useVibe } from "@/lib/vibe-context";
 
@@ -18,8 +19,8 @@ const DEBOUNCE_MS = 450;
 const SUPPRESS_MS = 800;
 
 /**
- * Persists "Simulate City Pulse" controls: vibe, time, presentation, Mia origin.
- * Supabase: shared across your phone (Mia) and PC (owner). localStorage: same tab / no DB.
+ * Persists simulator + path state: vibe, time, presentation, `mia_origin`, `is_walking`, `mia_destination`.
+ * Realtime + Supabase keep Mia in sync with the Path Simulator (walking / route ready / still).
  */
 export function SimulatorStateBridge() {
   const { vibe, setVibe } = useVibe();
@@ -29,7 +30,9 @@ export function SimulatorStateBridge() {
     isPresentationMode,
     setIsPresentationMode,
     miaOrigin,
-    setMiaOrigin,
+    isWalking,
+    destination,
+    applySimulatorPersistenceSnapshot,
   } = useAppContext();
 
   const [hydrated, setHydrated] = useState(false);
@@ -49,14 +52,22 @@ export function SimulatorStateBridge() {
           setVibe(fromDb.vibe);
           setSimulatedTime(fromDb.simulatedTime);
           setIsPresentationMode(fromDb.isPresentationMode);
-          setMiaOrigin(fromDb.miaOrigin);
+          applySimulatorPersistenceSnapshot({
+            miaOrigin: fromDb.miaOrigin,
+            miaDestination: fromDb.miaDestination,
+            isWalking: fromDb.isWalking,
+          });
         } else {
           const ls = loadSimulatorFromLocalStorage();
           if (ls) {
             setVibe(ls.vibe);
             setSimulatedTime(ls.simulatedTime);
             setIsPresentationMode(ls.isPresentationMode);
-            setMiaOrigin(ls.miaOrigin);
+            applySimulatorPersistenceSnapshot({
+              miaOrigin: ls.miaOrigin,
+              miaDestination: ls.miaDestination ?? null,
+              isWalking: ls.isWalking ?? false,
+            });
           }
         }
       } else {
@@ -65,7 +76,11 @@ export function SimulatorStateBridge() {
           setVibe(ls.vibe);
           setSimulatedTime(ls.simulatedTime);
           setIsPresentationMode(ls.isPresentationMode);
-          setMiaOrigin(ls.miaOrigin);
+          applySimulatorPersistenceSnapshot({
+            miaOrigin: ls.miaOrigin,
+            miaDestination: ls.miaDestination ?? null,
+            isWalking: ls.isWalking ?? false,
+          });
         }
       }
       if (!cancelled) setHydrated(true);
@@ -73,7 +88,7 @@ export function SimulatorStateBridge() {
     return () => {
       cancelled = true;
     };
-  }, [setMiaOrigin, setSimulatedTime, setIsPresentationMode, setVibe]);
+  }, [applySimulatorPersistenceSnapshot, setSimulatedTime, setIsPresentationMode, setVibe]);
 
   // Realtime: other device changed simulator
   useEffect(() => {
@@ -94,7 +109,11 @@ export function SimulatorStateBridge() {
           setVibe(p.vibe);
           setSimulatedTime(p.simulatedTime);
           setIsPresentationMode(p.isPresentationMode);
-          setMiaOrigin(p.miaOrigin);
+          applySimulatorPersistenceSnapshot({
+            miaOrigin: p.miaOrigin,
+            miaDestination: p.miaDestination,
+            isWalking: p.isWalking,
+          });
         },
       )
       .subscribe();
@@ -102,7 +121,7 @@ export function SimulatorStateBridge() {
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [setIsPresentationMode, setMiaOrigin, setSimulatedTime, setVibe]);
+  }, [applySimulatorPersistenceSnapshot, setIsPresentationMode, setSimulatedTime, setVibe]);
 
   // Debounced persist on user changes
   useEffect(() => {
@@ -114,6 +133,8 @@ export function SimulatorStateBridge() {
       simulatedTime,
       isPresentationMode,
       miaOrigin,
+      isWalking,
+      miaDestination: destination,
     };
     latestRef.current = p;
 
@@ -123,6 +144,7 @@ export function SimulatorStateBridge() {
       if (!payload) return;
       saveSimulatorToLocalStorage(payload);
       void upsertSimulatorState(payload);
+      void upsertConsumerLocation(payload.miaOrigin);
     }, DEBOUNCE_MS);
 
     return () => {
@@ -131,7 +153,7 @@ export function SimulatorStateBridge() {
         saveTimerRef.current = null;
       }
     };
-  }, [hydrated, vibe, simulatedTime, isPresentationMode, miaOrigin]);
+  }, [hydrated, vibe, simulatedTime, isPresentationMode, miaOrigin, isWalking, destination]);
 
   return null;
 }

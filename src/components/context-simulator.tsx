@@ -8,9 +8,9 @@ import {
   Sparkles,
   Store,
   Sun,
+  Thermometer,
   Trophy,
   User,
-  Utensils,
   X,
   Zap,
 } from "lucide-react";
@@ -20,22 +20,11 @@ import { VIBE_ORDER, type VibeKey } from "@/lib/vibe";
 import { useAppContext } from "@/lib/app-context";
 import { useMerchants, useMerchantRules } from "@/lib/merchant-rules-context";
 import { getActivationState, type ActivationState } from "@/lib/offerEngine";
+import { DESKTOP_MAIN_LEFT, SHELL_INNER_MAX } from "@/lib/shell-layout";
+import { cn } from "@/lib/utils";
 import { PayoneSeal } from "./payone-seal";
 import { PathSimulator } from "./path-simulator";
-
-const META: Record<VibeKey, { label: string; icon: typeof Sun; hint: string }> = {
-  sunny: { label: "Sunny", icon: Sun, hint: "Open terraces, gelaterias, family bakeries" },
-  rainy: { label: "Rainy", icon: CloudRain, hint: "Cosy local cafés, soup, hot chocolate" },
-  nighttime: { label: "Late hours", icon: Moon, hint: "Family bistros, Weinstuben, late bakeries" },
-  event: { label: "Local hotspot", icon: Utensils, hint: "Festival nearby drives traffic to local restaurants" },
-};
-
-const TIME_PRESETS: { label: string; value: string | null }[] = [
-  { label: "Morning 08:30", value: "08:30" },
-  { label: "Evening 17:45", value: "17:45" },
-  { label: "Night 22:15", value: "22:15" },
-  { label: "Reset", value: null },
-];
+import { useI18n } from "@/lib/i18n/context";
 
 const ACTIVATION_TONE: Record<ActivationState, string> = {
   low_traffic: "border-emerald-300 bg-emerald-50 text-emerald-800",
@@ -43,13 +32,55 @@ const ACTIVATION_TONE: Record<ActivationState, string> = {
   target_reached: "border-amber-300 bg-amber-50 text-amber-800",
 };
 
-const ACTIVATION_LABEL: Record<ActivationState, string> = {
-  low_traffic: "Low traffic · live",
-  normal: "Steady",
-  target_reached: "Day done",
-};
-
 export function ContextSimulator() {
+  const { t } = useI18n();
+  const meta = useMemo(
+    (): Record<VibeKey, { label: string; icon: typeof Sun; hint: string }> => ({
+      sunny: {
+        label: t("vibe.meta.sunny.label"),
+        icon: Sun,
+        hint: t("vibe.meta.sunny.hint"),
+      },
+      rainy: {
+        label: t("vibe.meta.rainy.label"),
+        icon: CloudRain,
+        hint: t("vibe.meta.rainy.hint"),
+      },
+      nighttime: {
+        label: t("vibe.meta.nighttime.label"),
+        icon: Moon,
+        hint: t("vibe.meta.nighttime.hint"),
+      },
+      event: {
+        label: t("vibe.meta.event.label"),
+        icon: Thermometer,
+        hint: t("vibe.meta.event.hint"),
+      },
+    }),
+    [t],
+  );
+
+  const timePresets = useMemo(
+    () =>
+      [
+        { label: t("simulator.time.morning"), value: "08:30" as const },
+        { label: t("simulator.time.evening"), value: "17:45" as const },
+        { label: t("simulator.time.night"), value: "22:15" as const },
+        { label: t("simulator.time.reset"), value: null },
+      ] as const,
+    [t],
+  );
+
+  const activationLabel = useMemo(
+    () =>
+      ({
+        low_traffic: t("simulator.activation.low"),
+        normal: t("simulator.activation.normal"),
+        target_reached: t("simulator.activation.done"),
+      }) as Record<ActivationState, string>,
+    [t],
+  );
+
   const [open, setOpen] = useState(false);
   const { vibe, setVibe } = useVibe();
   const {
@@ -85,11 +116,11 @@ export function ContextSimulator() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-3 text-xs font-semibold text-background shadow-2xl shadow-black/30 transition active:scale-95"
-        aria-label="Simulate City Pulse"
+        className="fixed bottom-24 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-3 text-xs font-semibold text-background shadow-2xl shadow-black/30 transition active:scale-95 lg:bottom-8 lg:right-8"
+        aria-label={t("simulator.fab")}
       >
         <Sparkles className="h-4 w-4" />
-        Simulate City Pulse
+        {t("simulator.fab")}
       </button>
 
       <AnimatePresence>
@@ -100,28 +131,30 @@ export function ContextSimulator() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setOpen(false)}
-              className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+              className={cn("fixed inset-0 z-50 bg-black/50 backdrop-blur-sm", DESKTOP_MAIN_LEFT)}
             />
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 30, stiffness: 280 }}
-              className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[88vh] max-w-md flex-col overflow-hidden rounded-t-3xl bg-card shadow-2xl"
+              className={cn(
+                "fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] flex-col overflow-hidden rounded-t-3xl border-t border-border bg-card shadow-2xl",
+                SHELL_INNER_MAX,
+                "lg:inset-x-auto lg:bottom-8 lg:right-8 lg:left-auto lg:max-h-[min(85vh,46rem)] lg:w-[min(28rem,calc(100vw-14rem-2.5rem))] lg:rounded-2xl lg:border lg:border-border lg:shadow-2xl",
+              )}
             >
               <div className="px-5 pt-3">
                 <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-border" />
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-bold">Simulate City Pulse</h2>
-                    <p className="text-xs text-muted-foreground">
-                      Toggle context, time, walk Mia through Old Town and watch VibePay adapt.
-                    </p>
+                    <h2 className="text-lg font-bold">{t("simulator.title")}</h2>
+                    <p className="text-xs text-muted-foreground">{t("simulator.subtitle")}</p>
                   </div>
                   <button
                     onClick={() => setOpen(false)}
                     className="rounded-full bg-muted p-2 text-muted-foreground"
-                    aria-label="Close"
+                    aria-label={t("common.close")}
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -131,7 +164,7 @@ export function ContextSimulator() {
               <div className="flex-1 overflow-y-auto px-5 pb-8">
               <div className="mb-4 rounded-2xl border border-border bg-surface p-2">
                 <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                  Audience
+                  {t("simulator.audience")}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   <Link
@@ -143,7 +176,7 @@ export function ContextSimulator() {
                         : "border-border bg-surface text-foreground hover:bg-muted"
                     }`}
                   >
-                    <User className="h-3.5 w-3.5" /> Mia view
+                    <User className="h-3.5 w-3.5" /> {t("simulator.miaView")}
                   </Link>
                   <Link
                     to="/merchant"
@@ -154,20 +187,18 @@ export function ContextSimulator() {
                         : "border-border bg-surface text-foreground hover:bg-muted"
                     }`}
                   >
-                    <Store className="h-3.5 w-3.5" /> Owner view
+                    <Store className="h-3.5 w-3.5" /> {t("simulator.ownerView")}
                   </Link>
                 </div>
                 <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
-                  Same context, two perspectives. Owners tweak presets in real time and Mia sees the change instantly.
+                  {t("simulator.audienceHint")}
                 </p>
               </div>
 
               <div className="mb-4 flex items-center justify-between rounded-2xl border border-border bg-surface px-3 py-2">
                 <div>
-                  <p className="text-sm font-semibold">Presentation Mode</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Shows iPhone status bar and hides simulator labels.
-                  </p>
+                  <p className="text-sm font-semibold">{t("simulator.presentation")}</p>
+                  <p className="text-[11px] text-muted-foreground">{t("simulator.presentationHint")}</p>
                 </div>
                 <button
                   type="button"
@@ -175,7 +206,7 @@ export function ContextSimulator() {
                   className={`relative h-6 w-11 rounded-full border border-border transition ${
                     isPresentationMode ? "bg-primary" : "bg-muted"
                   }`}
-                  aria-label="Toggle presentation mode"
+                  aria-label={t("simulator.presentation")}
                   aria-pressed={isPresentationMode}
                 >
                   <span
@@ -188,12 +219,9 @@ export function ContextSimulator() {
 
               <div className="mb-4 rounded-2xl border border-border bg-surface p-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                  Device flow
+                  {t("simulator.deviceFlow")}
                 </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Replays the lock screen → home → open VibePay for the next demo. Same tab: next load
-                  skips intro until you replay.
-                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{t("simulator.deviceFlowHint")}</p>
                 <button
                   type="button"
                   onClick={() => {
@@ -202,16 +230,16 @@ export function ContextSimulator() {
                   }}
                   className="mt-2 w-full rounded-xl border border-border bg-card py-2 text-xs font-semibold text-foreground transition hover:bg-muted"
                 >
-                  Replay iPhone intro (lock + home)
+                  {t("simulator.replayIntro")}
                 </button>
               </div>
 
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Vibe
+                {t("simulator.vibeSection")}
               </p>
               <div className="grid grid-cols-2 gap-3">
                 {VIBE_ORDER.map((key) => {
-                  const m = META[key];
+                  const m = meta[key];
                   const Icon = m.icon;
                   const active = vibe === key;
                   return (
@@ -237,7 +265,7 @@ export function ContextSimulator() {
                       </div>
                       {active && (
                         <span className="absolute right-3 top-3 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase text-primary-foreground">
-                          Live
+                          {t("simulator.liveBadge")}
                         </span>
                       )}
                     </button>
@@ -246,10 +274,10 @@ export function ContextSimulator() {
               </div>
 
               <p className="mt-5 mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Time Travel
+                {t("simulator.timeTravel")}
               </p>
               <div className="grid grid-cols-4 gap-2">
-                {TIME_PRESETS.map((preset) => {
+                {timePresets.map((preset) => {
                   const active = simulatedTime === preset.value;
                   return (
                     <button
@@ -270,35 +298,42 @@ export function ContextSimulator() {
 
               <div className="mt-5 rounded-2xl border border-border bg-surface p-3">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                      Live traffic via Payone
+                      {t("simulator.traffic.title")}
                     </p>
                     <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-                      Bump transactions to flip the live offer on/off in real time.
+                      {t("simulator.traffic.hint")}
                     </p>
                   </div>
-                  {trafficState ? (
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${ACTIVATION_TONE[trafficState]}`}
-                    >
-                      {trafficState === "low_traffic" ? (
-                        <Zap className="h-2.5 w-2.5" />
-                      ) : trafficState === "target_reached" ? (
-                        <Trophy className="h-2.5 w-2.5" />
-                      ) : (
-                        <Sparkles className="h-2.5 w-2.5" />
-                      )}
-                      {ACTIVATION_LABEL[trafficState]}
-                    </span>
-                  ) : null}
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    {trafficState ? (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${ACTIVATION_TONE[trafficState]}`}
+                      >
+                        {trafficState === "low_traffic" ? (
+                          <Zap className="h-2.5 w-2.5" />
+                        ) : trafficState === "target_reached" ? (
+                          <Trophy className="h-2.5 w-2.5" />
+                        ) : (
+                          <Sparkles className="h-2.5 w-2.5" />
+                        )}
+                        {activationLabel[trafficState]}
+                      </span>
+                    ) : null}
+                    <PayoneSeal
+                      variant="rail"
+                      tone="live"
+                      trailing={t("simulator.traffic.payoneRail")}
+                    />
+                  </div>
                 </div>
 
                 <select
                   value={activeTrafficId ?? ""}
                   onChange={(e) => setTrafficMerchantId(e.target.value)}
                   className="mt-2 w-full rounded-xl border border-border bg-card px-2 py-1.5 text-xs font-medium text-foreground"
-                  aria-label="Pick merchant for traffic test"
+                  aria-label={t("simulator.traffic.pickMerchant")}
                 >
                   {merchants.map((m) => (
                     <option key={m.id} value={m.id}>
@@ -311,12 +346,12 @@ export function ContextSimulator() {
                   <>
                     <div className="mt-2 flex items-baseline justify-between text-[10px] text-muted-foreground">
                       <span className="font-bold uppercase tracking-wide">
-                        Transactions today
+                        {t("simulator.traffic.txToday")}
                       </span>
                       <span className="text-sm font-bold tabular-nums text-foreground">
                         {trafficMerchant.currentTransactionsToday}
                         <span className="ml-1 text-[10px] font-medium text-muted-foreground">
-                          / {trafficMerchant.lowTrafficThreshold} target
+                          {t("simulator.traffic.target", { n: trafficMerchant.lowTrafficThreshold })}
                         </span>
                       </span>
                     </div>
@@ -330,7 +365,7 @@ export function ContextSimulator() {
                         setTransactionsToday(trafficMerchant.id, Number(e.target.value))
                       }
                       className="mt-1 w-full accent-primary"
-                      aria-label="Transactions today"
+                      aria-label={t("simulator.traffic.txToday")}
                     />
 
                     <div className="mt-2 grid grid-cols-3 gap-1.5">
@@ -339,14 +374,14 @@ export function ContextSimulator() {
                         onClick={() => incrementTransaction(trafficMerchant.id)}
                         className="inline-flex items-center justify-center gap-1 rounded-full border border-primary bg-primary px-2 py-1 text-[10px] font-semibold text-primary-foreground transition active:scale-95"
                       >
-                        <Plus className="h-3 w-3" /> +1 sale
+                        <Plus className="h-3 w-3" /> {t("simulator.traffic.plusOne")}
                       </button>
                       <button
                         type="button"
                         onClick={() => setTransactionsToday(trafficMerchant.id, 0)}
                         className="inline-flex items-center justify-center gap-1 rounded-full border border-border bg-card px-2 py-1 text-[10px] font-semibold text-muted-foreground transition hover:bg-muted"
                       >
-                        <RotateCcw className="h-3 w-3" /> Reset
+                        <RotateCcw className="h-3 w-3" /> {t("simulator.traffic.reset")}
                       </button>
                       <button
                         type="button"
@@ -363,7 +398,9 @@ export function ContextSimulator() {
                         }`}
                       >
                         <Trophy className="h-3 w-3" />{" "}
-                        {trafficMerchant.dailyTargetReached ? "Goal ON" : "Goal OFF"}
+                        {trafficMerchant.dailyTargetReached
+                          ? t("simulator.traffic.goalOn")
+                          : t("simulator.traffic.goalOff")}
                       </button>
                     </div>
                   </>
@@ -375,9 +412,7 @@ export function ContextSimulator() {
               </div>
 
               <div className="mt-4 flex flex-col items-center gap-1.5">
-                <p className="text-center text-[11px] text-muted-foreground">
-                  Demo mode · Tavily senses real merchants, Payone Riel settles every transaction.
-                </p>
+                <p className="text-center text-[11px] text-muted-foreground">{t("simulator.footer")}</p>
                 <PayoneSeal variant="wordmark" />
               </div>
               </div>

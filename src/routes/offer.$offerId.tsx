@@ -2,7 +2,18 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { ArrowLeft, MapPin, Clock, BadgeCheck, ShieldCheck } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { VIBES } from "@/lib/vibe";
+import { useEffect, useMemo, useState } from "react";
+import { buildVibeOfferPageUrl } from "@/lib/offerRedemptionQr";
+import { VIBES, type VibeOffer } from "@/lib/vibe";
+
+function stableOfferCodeSuffix(seed: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36).toUpperCase().slice(0, 6);
+}
 
 export const Route = createFileRoute("/offer/$offerId")({
   head: ({ params }) => {
@@ -34,9 +45,18 @@ export const Route = createFileRoute("/offer/$offerId")({
 });
 
 function OfferPage() {
-  const offer = Route.useLoaderData();
+  const offer = Route.useLoaderData() as VibeOffer;
   const Icon = offer.icon;
-  const code = `VIBE-${offer.id.toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  const humanCode = useMemo(
+    () => `VIBE-${offer.id.toUpperCase()}-${stableOfferCodeSuffix(offer.id)}`,
+    [offer.id],
+  );
+  const [qrValue, setQrValue] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setQrValue(buildVibeOfferPageUrl(offer.id, window.location.origin));
+  }, [offer.id]);
 
   return (
     <div data-vibe={offer.vibe} className="min-h-screen bg-surface">
@@ -94,17 +114,21 @@ function OfferPage() {
               Show this at the till
             </p>
             <div className="mx-auto mt-4 w-fit rounded-2xl bg-white p-4 shadow-inner ring-1 ring-border">
-              <QRCodeSVG
-                value={code}
-                size={196}
-                bgColor="#ffffff"
-                fgColor="#111111"
-                level="M"
-                marginSize={0}
-              />
+              {qrValue ? (
+                <QRCodeSVG
+                  value={qrValue}
+                  size={196}
+                  bgColor="#ffffff"
+                  fgColor="#111111"
+                  level="M"
+                  marginSize={0}
+                />
+              ) : (
+                <div className="h-[196px] w-[196px] animate-pulse rounded-lg bg-muted" aria-hidden />
+              )}
             </div>
             <p className="mt-4 text-center font-mono text-sm font-semibold tracking-widest">
-              {code}
+              {humanCode}
             </p>
             <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
               <ShieldCheck className="h-3.5 w-3.5 text-primary" />

@@ -10,6 +10,7 @@ import {
 import { getSupabase, isSupabaseConfigured } from "./supabaseClient";
 import {
   type MerchantRow,
+  MERCHANTS_CROSS_TAB_SYNC_KEY,
   fetchMerchantsFromSupabase,
   merchantToRow,
   orderMerchants,
@@ -33,6 +34,8 @@ type Updater<T> = (prev: T) => T;
 
 interface MerchantRulesState {
   merchants: LocalMerchant[];
+  /** False until the first Supabase merchants fetch finishes (avoids flashing seed data). True immediately if Supabase is off. */
+  merchantsRemoteHydrated: boolean;
   updateMerchant: (merchantId: string, updater: Updater<LocalMerchant>) => void;
   updateRule: (merchantId: string, ruleId: string, updater: Updater<OfferRule>) => void;
   toggleRule: (merchantId: string, ruleId: string) => void;
@@ -50,33 +53,82 @@ const MerchantRulesContext = createContext<MerchantRulesState | null>(null);
 function cloneMerchants(): LocalMerchant[] {
   return INITIAL_MERCHANTS.map((m) => ({
     ...m,
+    productInventory: m.productInventory.map((p) => ({ ...p, tags: [...p.tags] })),
+    flashOffers: (m.flashOffers ?? []).map((s) => ({
+      ...s,
+      productTags: s.productTags ? [...s.productTags] : null,
+    })),
     rules: m.rules.map((r) => ({ ...r, when: { ...r.when }, then: { ...r.then } })),
   }));
 }
 
 export function MerchantRulesProvider({ children }: { children: ReactNode }) {
   const [merchants, setMerchants] = useState<LocalMerchant[]>(() => cloneMerchants());
+  const [merchantsRemoteHydrated, setMerchantsRemoteHydrated] = useState(() => !isSupabaseConfigured());
+
+  useEffect(() => {
+    if (import.meta.env.DEV && !isSupabaseConfigured()) {
+      console.warn(
+        "[VibePay] Supabase no está conectado en el front: los cambios (ofertas, reglas…) solo viven en esta pestaña.\n" +
+          "→ Crea .env.local con VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY (Project Settings → API en Supabase).\n" +
+          "→ Copia la plantilla desde .env.example, guarda y reinicia `npm run dev`.",
+      );
+    }
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
     const supabase = getSupabase();
     if (!supabase) return;
     let cancelled = false;
+    let pullDebounce: number | null = null;
+
+    const applyRemoteList = (list: LocalMerchant[] | null) => {
+      if (cancelled || !list || list.length === 0) return;
+      setMerchants(orderMerchants(list));
+    };
+
+    /** Full pull from DB — used when another tab wrote (storage) or tab regains focus. */
+    const resyncFromSupabase = async () => {
+      const list = await fetchMerchantsFromSupabase();
+      if (cancelled) return;
+      applyRemoteList(list);
+    };
+
+    const scheduleResync = () => {
+      if (pullDebounce != null) window.clearTimeout(pullDebounce);
+      pullDebounce = window.setTimeout(() => {
+        pullDebounce = null;
+        void resyncFromSupabase();
+      }, 320);
+    };
 
     (async () => {
-      let list = await fetchMerchantsFromSupabase();
-      if (cancelled) return;
-      // Empty table or first fetch hiccup: fill from INITIAL_MERCHANTS
-      if (!list || list.length === 0) {
-        await ensureMerchantsSeeded();
+      try {
+        let list = await fetchMerchantsFromSupabase();
         if (cancelled) return;
-        list = await fetchMerchantsFromSupabase();
-      }
-      if (cancelled) return;
-      if (list && list.length > 0) {
-        setMerchants(orderMerchants(list));
+        // Empty table or first fetch hiccup: fill from INITIAL_MERCHANTS
+        if (!list || list.length === 0) {
+          await ensureMerchantsSeeded();
+          if (cancelled) return;
+          list = await fetchMerchantsFromSupabase();
+        }
+        if (cancelled) return;
+        applyRemoteList(list);
+      } finally {
+        if (!cancelled) setMerchantsRemoteHydrated(true);
       }
     })();
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === MERCHANTS_CROSS_TAB_SYNC_KEY && e.newValue) scheduleResync();
+    };
+    window.addEventListener("storage", onStorage);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") scheduleResync();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     const channel = supabase
       .channel("vibepay-merchants")
@@ -101,10 +153,15 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
           }
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") scheduleResync();
+      });
 
     return () => {
       cancelled = true;
+      if (pullDebounce != null) window.clearTimeout(pullDebounce);
+      window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", onVisibility);
       void supabase.removeChannel(channel);
     };
   }, []);
@@ -114,7 +171,7 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
       setMerchants((prev) => {
         const next = prev.map((m) => (m.id === merchantId ? updater(m) : m));
         const row = next.find((m) => m.id === merchantId);
-        if (row && isSupabaseConfigured()) void upsertMerchant(row);
+        if (row) void upsertMerchant(row);
         return next;
       });
     },
@@ -132,7 +189,7 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
           };
         });
         const row = next.find((m) => m.id === merchantId);
-        if (row && isSupabaseConfigured()) void upsertMerchant(row);
+        if (row) void upsertMerchant(row);
         return next;
       });
     },
@@ -151,7 +208,7 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
         };
       });
       const row = next.find((m) => m.id === merchantId);
-      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      if (row) void upsertMerchant(row);
       return next;
     });
   }, []);
@@ -160,7 +217,7 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
     setMerchants((prev) => {
       const next = prev.map((m) => (m.id === merchantId ? { ...m, occupancy } : m));
       const row = next.find((m) => m.id === merchantId);
-      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      if (row) void upsertMerchant(row);
       return next;
     });
   }, []);
@@ -172,7 +229,7 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
         m.id === merchantId ? { ...m, currentTransactionsToday: safe } : m,
       );
       const row = next.find((m) => m.id === merchantId);
-      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      if (row) void upsertMerchant(row);
       return next;
     });
   }, []);
@@ -184,7 +241,7 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
         m.id === merchantId ? { ...m, lowTrafficThreshold: safe } : m,
       );
       const row = next.find((m) => m.id === merchantId);
-      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      if (row) void upsertMerchant(row);
       return next;
     });
   }, []);
@@ -195,7 +252,7 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
         m.id === merchantId ? { ...m, dailyTargetReached: reached } : m,
       );
       const row = next.find((m) => m.id === merchantId);
-      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      if (row) void upsertMerchant(row);
       return next;
     });
   }, []);
@@ -208,7 +265,7 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
           : m,
       );
       const row = next.find((m) => m.id === merchantId);
-      if (row && isSupabaseConfigured()) void upsertMerchant(row);
+      if (row) void upsertMerchant(row);
       return next;
     });
   }, []);
@@ -218,7 +275,7 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
       const fresh = cloneMerchants().find((m) => m.id === merchantId);
       if (!fresh) return prev;
       const next = prev.map((m) => (m.id === merchantId ? fresh : m));
-      if (isSupabaseConfigured()) void upsertMerchant(fresh);
+      void upsertMerchant(fresh);
       return next;
     });
   }, []);
@@ -226,12 +283,13 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
   const resetAll = useCallback(() => {
     const fresh = cloneMerchants();
     setMerchants(fresh);
-    if (isSupabaseConfigured()) void upsertMerchants(fresh);
+    void upsertMerchants(fresh);
   }, []);
 
   const value = useMemo<MerchantRulesState>(
     () => ({
       merchants,
+      merchantsRemoteHydrated,
       updateMerchant,
       updateRule,
       toggleRule,
@@ -245,6 +303,7 @@ export function MerchantRulesProvider({ children }: { children: ReactNode }) {
     }),
     [
       merchants,
+      merchantsRemoteHydrated,
       updateMerchant,
       updateRule,
       toggleRule,
@@ -271,6 +330,10 @@ export function useMerchantRules(): MerchantRulesState {
 
 export function useMerchants(): LocalMerchant[] {
   return useMerchantRules().merchants;
+}
+
+export function useMerchantsRemoteHydrated(): boolean {
+  return useMerchantRules().merchantsRemoteHydrated;
 }
 
 export function useMerchantById(id: string | null | undefined): LocalMerchant | undefined {

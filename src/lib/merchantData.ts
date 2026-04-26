@@ -24,6 +24,25 @@ export interface GeoPoint {
   lng: number;
 }
 
+/** POS / ERP style line items — the Co-Pilot agent reads this JSON to propose concrete promos. */
+export interface MerchantProduct {
+  id: string;
+  name: string;
+  /** e.g. coffee, latte, pastry — matched against Mia's VibePay preference tags when targeting. */
+  tags: string[];
+}
+
+/** One concurrent flash campaign; several can be live per merchant. */
+export interface MerchantFlashOfferSlot {
+  id: string;
+  title: string;
+  description: string;
+  discountPct: number;
+  endsAt: number;
+  productId: string | null;
+  productTags: string[] | null;
+}
+
 export interface LocalMerchant {
   id: string;
   name: string;
@@ -51,6 +70,112 @@ export interface LocalMerchant {
   dailyTargetReached: boolean;
   vibesMatch: VibeMatch[];
   signature: string;
+  /** Owner-launched flash offer persisted to Supabase — visible to Mia when active and not expired. */
+  isOfferActive: boolean;
+  activeOfferTitle: string | null;
+  activeOfferDescription: string | null;
+  activeOfferDiscountPct: number | null;
+  /** Unix ms; null when no timed offer. */
+  activeOfferEndsAt: number | null;
+  /** Article catalogue (persisted as JSON in Supabase). */
+  productInventory: MerchantProduct[];
+  /** Set when the owner launches an offer — used to decide if Mia (profile tags) should see it. */
+  activeOfferProductTags: string[] | null;
+  activeOfferProductId: string | null;
+  /** Multiple live flash offers (persisted as JSON); legacy `activeOffer*` mirror the primary active slot. */
+  flashOffers: MerchantFlashOfferSlot[];
+}
+
+function isFlashSlotRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x != null;
+}
+
+function parseFlashOfferSlot(x: unknown): MerchantFlashOfferSlot | null {
+  if (!isFlashSlotRecord(x)) return null;
+  const id = x.id;
+  const title = x.title;
+  const description = x.description;
+  const discountPct = x.discountPct;
+  const endsAt = x.endsAt;
+  if (typeof id !== "string" || typeof title !== "string" || typeof description !== "string")
+    return null;
+  if (typeof discountPct !== "number" || typeof endsAt !== "number") return null;
+  const productId = x.productId;
+  const productTags = x.productTags;
+  return {
+    id,
+    title,
+    description,
+    discountPct,
+    endsAt,
+    productId: typeof productId === "string" ? productId : null,
+    productTags: Array.isArray(productTags) ? productTags.filter((t): t is string => typeof t === "string") : null,
+  };
+}
+
+export function parseFlashOffersFromJson(raw: unknown): MerchantFlashOfferSlot[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(parseFlashOfferSlot).filter((s): s is MerchantFlashOfferSlot => s != null);
+}
+
+/** Non-expired slots, soonest expiry first. Falls back to legacy single-offer columns if JSON empty. */
+export function activeFlashSlots(m: LocalMerchant): MerchantFlashOfferSlot[] {
+  const now = Date.now();
+  const fromArr = (m.flashOffers ?? []).filter((s) => s.endsAt > now);
+  if (fromArr.length > 0) return [...fromArr].sort((a, b) => a.endsAt - b.endsAt);
+  if (
+    m.isOfferActive &&
+    m.activeOfferEndsAt != null &&
+    m.activeOfferEndsAt > now &&
+    (m.activeOfferDescription?.length ?? 0) > 0
+  ) {
+    return [
+      {
+        id: "legacy-single",
+        title: m.activeOfferTitle ?? "",
+        description: m.activeOfferDescription!,
+        discountPct: m.activeOfferDiscountPct ?? 30,
+        endsAt: m.activeOfferEndsAt,
+        productId: m.activeOfferProductId,
+        productTags: m.activeOfferProductTags ? [...m.activeOfferProductTags] : null,
+      },
+    ];
+  }
+  return [];
+}
+
+export function merchantHasAnyActiveFlash(m: LocalMerchant): boolean {
+  return activeFlashSlots(m).length > 0;
+}
+
+/** All slots expired (or legacy flag stale) but owner should dismiss UI. */
+export function merchantHasStaleFlashOnly(m: LocalMerchant): boolean {
+  if (merchantHasAnyActiveFlash(m)) return false;
+  if ((m.flashOffers ?? []).some((s) => s.endsAt <= Date.now())) return true;
+  if (m.isOfferActive) return true;
+  return false;
+}
+
+/** Align legacy scalar columns with the earliest-expiring active slot (Supabase / old readers). */
+export function syncLegacyFieldsFromFlashOffers(m: LocalMerchant): LocalMerchant {
+  const active = activeFlashSlots(m);
+  const primary = active[0];
+  return {
+    ...m,
+    isOfferActive: active.length > 0,
+    activeOfferTitle: primary?.title ?? null,
+    activeOfferDescription: primary?.description ?? null,
+    activeOfferDiscountPct: primary?.discountPct ?? null,
+    activeOfferEndsAt: primary?.endsAt ?? null,
+    activeOfferProductId: primary?.productId ?? null,
+    activeOfferProductTags: primary?.productTags ? [...primary.productTags] : null,
+  };
+}
+
+export function activeFlashProductIds(m: LocalMerchant): string[] {
+  return activeFlashSlots(m)
+    .map((s) => s.productId)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
 }
 
 export const MIA_HOME: GeoPoint = { lat: 48.7758, lng: 9.1829 };
@@ -126,6 +251,31 @@ export const INITIAL_MERCHANTS: LocalMerchant[] = [
     dailyTargetReached: false,
     vibesMatch: ["cold", "rainy", "morning"],
     signature: "Family-run · since 1968",
+    isOfferActive: false,
+    activeOfferTitle: null,
+    activeOfferDescription: null,
+    activeOfferDiscountPct: null,
+    activeOfferEndsAt: null,
+    productInventory: [
+      {
+        id: "latte-classic",
+        name: "Latte grande",
+        tags: ["coffee", "latte", "warm", "rainy-day", "local-specialty"],
+      },
+      {
+        id: "filter-hause",
+        name: "Café filtro de la casa",
+        tags: ["coffee", "filter", "morning", "quiet-cup"],
+      },
+      {
+        id: "croissant-butter",
+        name: "Croissant de mantequilla",
+        tags: ["pastry", "bakery-crossover", "morning"],
+      },
+    ],
+    activeOfferProductTags: null,
+    activeOfferProductId: null,
+    flashOffers: [],
     rules: [
       {
         id: "kaffee-quiet-cold",
@@ -179,11 +329,52 @@ export const INITIAL_MERCHANTS: LocalMerchant[] = [
     fallbackMessage: "Independent bakery — fresh batch every two hours.",
     softMessage:
       "Bäckerei Treiber ya cumplió su meta del día gracias a sus clientes regulares. ¡Gran día!",
-    currentTransactionsToday: 38,
-    lowTrafficThreshold: 25,
-    dailyTargetReached: true,
-    vibesMatch: ["morning", "cold"],
+    currentTransactionsToday: 4,
+    lowTrafficThreshold: 10,
+    dailyTargetReached: false,
+    /** Broad tags so path-simulator proximity pings work under common vibe + time combos (not only morning/cold). */
+    vibesMatch: ["morning", "cold", "evening", "night", "sunny", "rainy", "event"],
     signature: "Independent bakery · Mittelstand",
+    isOfferActive: false,
+    activeOfferTitle: null,
+    activeOfferDescription: null,
+    activeOfferDiscountPct: null,
+    activeOfferEndsAt: null,
+    productInventory: [
+      {
+        id: "brezel-laugen",
+        name: "Brezel de manteca",
+        tags: ["pastry", "savory", "morning", "local-specialty"],
+      },
+      {
+        id: "bienenstich-slice",
+        name: "Porción Bienenstich",
+        tags: ["pastry", "sweet", "afternoon"],
+      },
+      {
+        id: "filterklein",
+        name: "Kleiner Filterkaffee",
+        tags: ["coffee", "filter", "quick"],
+      },
+      {
+        id: "softeis-becher",
+        name: "Softeis im Becher (mostrador helado)",
+        tags: ["gelato", "sweet", "sunny-day", "afternoon", "cold-drink"],
+      },
+      {
+        id: "heisse-schokolade",
+        name: "Heiße Schokolade grande",
+        tags: ["warm", "rainy-day", "drink", "comfort"],
+      },
+      {
+        id: "abend-brotzeit",
+        name: "Brotzeit-Platte (tarde/noche)",
+        tags: ["evening", "food", "savory", "sharing", "local-specialty"],
+      },
+    ],
+    activeOfferProductTags: null,
+    activeOfferProductId: null,
+    flashOffers: [],
     rules: [
       {
         id: "baeckerei-morning-combo",
@@ -242,6 +433,31 @@ export const INITIAL_MERCHANTS: LocalMerchant[] = [
     dailyTargetReached: false,
     vibesMatch: ["rainy", "cold", "evening"],
     signature: "Family-owned · 80 m from you",
+    isOfferActive: false,
+    activeOfferTitle: null,
+    activeOfferDescription: null,
+    activeOfferDiscountPct: null,
+    activeOfferEndsAt: null,
+    productInventory: [
+      {
+        id: "wein-schwaebisch",
+        name: "Copa Schwäbisch (Trollinger)",
+        tags: ["wine", "evening", "local-specialty"],
+      },
+      {
+        id: "flammbrot",
+        name: "Flammkuchen clásico",
+        tags: ["food", "sharing", "evening"],
+      },
+      {
+        id: "espresso-bar",
+        name: "Espresso doble",
+        tags: ["coffee", "quick", "warm"],
+      },
+    ],
+    activeOfferProductTags: null,
+    activeOfferProductId: null,
+    flashOffers: [],
     rules: [
       {
         id: "weinhalle-quiet-warmup",
@@ -300,6 +516,31 @@ export const INITIAL_MERCHANTS: LocalMerchant[] = [
     dailyTargetReached: false,
     vibesMatch: ["sunny", "event"],
     signature: "Family terrace · Marktplatz",
+    isOfferActive: false,
+    activeOfferTitle: null,
+    activeOfferDescription: null,
+    activeOfferDiscountPct: null,
+    activeOfferEndsAt: null,
+    productInventory: [
+      {
+        id: "gelato-pistacchio",
+        name: "Gelato pistacho (doble)",
+        tags: ["gelato", "sweet", "sunny-day"],
+      },
+      {
+        id: "affogato",
+        name: "Affogato",
+        tags: ["coffee", "gelato", "afternoon"],
+      },
+      {
+        id: "waffel-mini",
+        name: "Mini gofre con chocolate",
+        tags: ["sweet", "kids", "quick"],
+      },
+    ],
+    activeOfferProductTags: null,
+    activeOfferProductId: null,
+    flashOffers: [],
     rules: [
       {
         id: "eiscafe-sunny",
@@ -357,6 +598,31 @@ export const INITIAL_MERCHANTS: LocalMerchant[] = [
     dailyTargetReached: true,
     vibesMatch: ["event", "evening", "night"],
     signature: "Family since 1994 · special menu",
+    isOfferActive: false,
+    activeOfferTitle: null,
+    activeOfferDescription: null,
+    activeOfferDiscountPct: null,
+    activeOfferEndsAt: null,
+    productInventory: [
+      {
+        id: "maultaschen-portion",
+        name: "Maultaschen en caldo",
+        tags: ["food", "warm", "local-specialty", "rainy-day"],
+      },
+      {
+        id: "spätzle-kaese",
+        name: "Käsespätzle",
+        tags: ["food", "comfort", "evening"],
+      },
+      {
+        id: "tiramisu",
+        name: "Tiramisú de la casa",
+        tags: ["sweet", "dessert", "sharing"],
+      },
+    ],
+    activeOfferProductTags: null,
+    activeOfferProductId: null,
+    flashOffers: [],
     rules: [
       {
         id: "trattoria-evening-busy",
@@ -414,6 +680,31 @@ export const INITIAL_MERCHANTS: LocalMerchant[] = [
     dailyTargetReached: false,
     vibesMatch: ["night", "evening"],
     signature: "Independent Weinstube · since 1972",
+    isOfferActive: false,
+    activeOfferTitle: null,
+    activeOfferDescription: null,
+    activeOfferDiscountPct: null,
+    activeOfferEndsAt: null,
+    productInventory: [
+      {
+        id: "trollinger-flight",
+        name: "Vuelo Trollinger (3 copas)",
+        tags: ["wine", "evening", "local-specialty"],
+      },
+      {
+        id: "maultaschen-wein",
+        name: "Maultaschen + copa",
+        tags: ["food", "wine", "warm"],
+      },
+      {
+        id: "obstkuchen",
+        name: "Tarta de manzana casera",
+        tags: ["sweet", "pastry", "afternoon"],
+      },
+    ],
+    activeOfferProductTags: null,
+    activeOfferProductId: null,
+    flashOffers: [],
     rules: [
       {
         id: "weinstube-night",
@@ -472,6 +763,31 @@ export const INITIAL_MERCHANTS: LocalMerchant[] = [
     dailyTargetReached: false,
     vibesMatch: ["cold", "sunny"],
     signature: "Independent boutique · Königstraße",
+    isOfferActive: false,
+    activeOfferTitle: null,
+    activeOfferDescription: null,
+    activeOfferDiscountPct: null,
+    activeOfferEndsAt: null,
+    productInventory: [
+      {
+        id: "merino-scarf",
+        name: "Bufanda Merino edición frío",
+        tags: ["accessory", "warm", "gift"],
+      },
+      {
+        id: "linen-shirt",
+        name: "Camisa lino slim",
+        tags: ["fashion", "sunny-day", "capsule", "local-specialty"],
+      },
+      {
+        id: "leather-wallet",
+        name: "Cartera piel hecha a mano",
+        tags: ["accessory", "gift", "local-specialty"],
+      },
+    ],
+    activeOfferProductTags: null,
+    activeOfferProductId: null,
+    flashOffers: [],
     rules: [
       {
         id: "walter-cold-quiet",
@@ -528,6 +844,38 @@ export function getMerchantById(
 }
 
 const EARTH_RADIUS_M = 6_371_000;
+
+/** Mia location line + nearest preset (i18n labels via `map.preset.{id}` in the UI). */
+export function describeMiaLocation(position: GeoPoint, isWalking: boolean): {
+  coordsOnly: string;
+  isWalking: boolean;
+  nearestPresetId: string | null;
+  nearestDistanceM: number | null;
+  hintKind: "near" | "toward" | null;
+} {
+  let best: { preset: MiaLocationPreset; d: number } | null = null;
+  for (const preset of MIA_LOCATION_PRESETS) {
+    const d = distanceMeters(position, preset.position);
+    if (!best || d < best.d) best = { preset, d };
+  }
+  const coordsOnly = `${position.lat.toFixed(4)}°, ${position.lng.toFixed(4)}°`;
+  if (!best) {
+    return {
+      coordsOnly,
+      isWalking,
+      nearestPresetId: null,
+      nearestDistanceM: null,
+      hintKind: null,
+    };
+  }
+  return {
+    coordsOnly,
+    isWalking,
+    nearestPresetId: best.preset.id,
+    nearestDistanceM: Math.round(best.d),
+    hintKind: best.d < 85 ? "near" : "toward",
+  };
+}
 
 export function distanceMeters(a: GeoPoint, b: GeoPoint): number {
   const toRad = (deg: number) => (deg * Math.PI) / 180;

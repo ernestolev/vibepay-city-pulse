@@ -3,25 +3,34 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/r
 import appCss from "../styles.css?url";
 import { VibeProvider } from "@/lib/vibe-context";
 import { AppProvider } from "@/lib/app-context";
+import { I18nProvider, useI18n } from "@/lib/i18n/context";
 import { MerchantRulesProvider } from "@/lib/merchant-rules-context";
 import { SimulatorStateBridge } from "@/components/simulator-state-bridge";
 import { DeviceBootLayer } from "@/components/device-boot-layer";
+import { CheckoutSessionBridge } from "@/components/checkout-session-bridge";
 
 function NotFoundComponent() {
+  return (
+    <I18nProvider>
+      <NotFoundInner />
+    </I18nProvider>
+  );
+}
+
+function NotFoundInner() {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
-        </p>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">{t("notfound.title")}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{t("notfound.body")}</p>
         <div className="mt-6">
           <Link
             to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Go home
+            {t("notfound.home")}
           </Link>
         </div>
       </div>
@@ -77,11 +86,14 @@ function RootComponent() {
   return (
     <MerchantRulesProvider>
       <AppProvider>
-        <VibeProvider>
-          <SimulatorStateBridge />
-          <Outlet />
-          <DeviceBootLayer />
-        </VibeProvider>
+        <I18nProvider>
+          <VibeProvider>
+            <SimulatorStateBridge />
+            <CheckoutSessionBridge />
+            <Outlet />
+            <DeviceBootLayer />
+          </VibeProvider>
+        </I18nProvider>
       </AppProvider>
     </MerchantRulesProvider>
   );

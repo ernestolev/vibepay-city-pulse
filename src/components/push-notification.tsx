@@ -1,8 +1,10 @@
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Waves } from "lucide-react";
-import { useAppContext } from "@/lib/app-context";
 import { PayoneSeal } from "@/components/payone-seal";
+import { useAppContext } from "@/lib/app-context";
+import { DESKTOP_MAIN_LEFT } from "@/lib/shell-layout";
+import { cn } from "@/lib/utils";
 
 export function PushNotification() {
   const { pushNotification, dismissPushNotification } = useAppContext();
@@ -14,7 +16,12 @@ export function PushNotification() {
   }, [pushNotification, dismissPushNotification]);
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-2 z-[60] flex justify-center px-3">
+    <div
+      className={cn(
+        "pointer-events-none fixed inset-x-0 top-2 z-[60] flex justify-center px-3",
+        DESKTOP_MAIN_LEFT,
+      )}
+    >
       <AnimatePresence>
         {pushNotification ? (
           <motion.button
@@ -31,7 +38,7 @@ export function PushNotification() {
               if (info.offset.y < -30) dismissPushNotification();
             }}
             onClick={() => dismissPushNotification()}
-            className="pointer-events-auto w-full max-w-md rounded-2xl border border-white/40 bg-white/85 p-3 text-left text-foreground shadow-[0_18px_45px_-15px_rgba(15,23,42,0.45)] backdrop-blur-xl"
+            className="pointer-events-auto mx-auto w-full max-w-md rounded-2xl border border-white/40 bg-white/85 p-3 text-left text-foreground shadow-[0_18px_45px_-15px_rgba(15,23,42,0.45)] backdrop-blur-xl"
             aria-live="polite"
             aria-label={`${pushNotification.title}. ${pushNotification.subtitle}`}
           >

@@ -11,6 +11,8 @@ export interface SimulatorStateRow {
   simulated_time: string | null;
   is_presentation_mode: boolean;
   mia_origin: GeoPoint;
+  is_walking?: boolean;
+  mia_destination?: GeoPoint | null;
 }
 
 export interface SimulatorStatePayload {
@@ -18,6 +20,8 @@ export interface SimulatorStatePayload {
   simulatedTime: string | null;
   isPresentationMode: boolean;
   miaOrigin: GeoPoint;
+  isWalking: boolean;
+  miaDestination: GeoPoint | null;
 }
 
 function parseVibe(s: string | undefined | null): VibeKey {
@@ -39,12 +43,28 @@ function parseOrigin(v: unknown): GeoPoint {
   return MIA_HOME;
 }
 
+function parseDestination(v: unknown): GeoPoint | null {
+  if (
+    v &&
+    typeof v === "object" &&
+    "lat" in v &&
+    "lng" in v &&
+    typeof (v as GeoPoint).lat === "number" &&
+    typeof (v as GeoPoint).lng === "number"
+  ) {
+    return { lat: (v as GeoPoint).lat, lng: (v as GeoPoint).lng };
+  }
+  return null;
+}
+
 export function rowToPayload(row: SimulatorStateRow): SimulatorStatePayload {
   return {
     vibe: parseVibe(row.vibe),
     simulatedTime: row.simulated_time,
     isPresentationMode: row.is_presentation_mode,
     miaOrigin: parseOrigin(row.mia_origin),
+    isWalking: Boolean(row.is_walking),
+    miaDestination: parseDestination(row.mia_destination ?? null),
   };
 }
 
@@ -55,6 +75,8 @@ function payloadToRow(p: SimulatorStatePayload): SimulatorStateRow {
     simulated_time: p.simulatedTime,
     is_presentation_mode: p.isPresentationMode,
     mia_origin: p.miaOrigin,
+    is_walking: p.isWalking,
+    mia_destination: p.miaDestination,
   };
 }
 
@@ -97,6 +119,8 @@ export function loadSimulatorFromLocalStorage(): SimulatorStatePayload | null {
       simulatedTime: typeof o.simulatedTime === "string" || o.simulatedTime === null ? o.simulatedTime : null,
       isPresentationMode: Boolean(o.isPresentationMode),
       miaOrigin: o.miaOrigin ? parseOrigin(o.miaOrigin) : MIA_HOME,
+      isWalking: Boolean(o.isWalking),
+      miaDestination: o.miaDestination != null ? parseDestination(o.miaDestination) : null,
     };
   } catch {
     return null;
